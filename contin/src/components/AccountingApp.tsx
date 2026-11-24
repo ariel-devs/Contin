@@ -9,39 +9,33 @@ import {
   useNavigate,
 } from 'react-router-dom'
 import { apiRequest } from '../services/accountingApi'
-import type { Book, Company, LoginSession } from '../types/accounting'
+import type {
+  Book,
+  Company,
+  DashboardData,
+  LoginSession,
+  TipoContribuyente,
+} from '../types/accounting'
+import { formatDate, formatMoney } from '../utils/format'
 import { Icon, type IconName } from './Icon'
 import AccountCatalogModule from './AccountCatalogModule'
 import JournalModule from './JournalModule'
 import PeriodsModule from './PeriodsModule'
+import TercerosModule from './TercerosModule'
+import DteModule from './DteModule'
+import LibroIvaModule from './LibroIvaModule'
+import DeclaracionIvaModule from './DeclaracionIvaModule'
 import './AccountingApp.css'
-
-type RecentEntry = {
-  id: number
-  numero: number
-  fecha: string
-  concepto: string
-}
-
-type DashboardData = {
-  assets: number
-  liabilities: number
-  equity: number
-  entryCount: number
-  totalDebe: number
-  totalHaber: number
-  balanceDifference: number
-  balanced: boolean
-  recentEntries: RecentEntry[]
-}
 
 const menuItems: { label: string; slug: string; icon: IconName }[] = [
   { label: 'Dashboard', slug: 'dashboard', icon: 'dashboard' },
   { label: 'Libro diario', slug: 'diario', icon: 'journal' },
   { label: 'Libro mayor', slug: 'mayor', icon: 'ledger' },
   { label: 'Balance', slug: 'balance', icon: 'balance' },
-  { label: 'Libros de IVA', slug: 'iva', icon: 'vat' },
-  { label: 'Partidas de cierre', slug: 'cierre', icon: 'closing' },
+  { label: 'Libro de IVA', slug: 'libro-iva', icon: 'vat' },
+  { label: 'Declaración IVA', slug: 'declaracion-iva', icon: 'closing' },
+  { label: 'Terceros', slug: 'terceros', icon: 'building' },
+  { label: 'DTE', slug: 'dte', icon: 'journal' },
   { label: 'Catálogo de cuentas', slug: 'cuentas', icon: 'accounts' },
   { label: 'Períodos contables', slug: 'periodos', icon: 'periods' },
   { label: 'Configuración', slug: 'configuracion', icon: 'settings' },
@@ -49,22 +43,6 @@ const menuItems: { label: string; slug: string; icon: IconName }[] = [
 
 function selectedBookStorageKey(companyId: number) {
   return `contin.selectedBook.${companyId}`
-}
-
-function formatAmount(value: number) {
-  return new Intl.NumberFormat('es', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value)
-}
-
-function formatDate(value: string) {
-  const date = new Date(`${value.slice(0, 10)}T00:00:00`)
-  return new Intl.DateTimeFormat('es', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).format(date)
 }
 
 function initials(name: string) {
@@ -102,21 +80,14 @@ function AccountingApp({
   const location = useLocation()
 
   const companyIdFromPath = location.pathname.match(/^\/companies\/(\d+)/)?.[1]
-  const currentCompany = companies.find(
-    (company) => company.id === Number(companyIdFromPath),
-  )
+  const currentCompany = companies.find((company) => company.id === Number(companyIdFromPath))
   const activeSection = location.pathname.split('/').filter(Boolean).at(-1)
-  const books =
-    currentCompany && booksForCompanyId === currentCompany.id ? loadedBooks : []
+  const books = currentCompany && booksForCompanyId === currentCompany.id ? loadedBooks : []
   const currentBook = books.find((book) => String(book.id) === selectedBookId)
   const currentDashboardKey =
-    currentCompany && currentBook
-      ? `${currentCompany.id}:${currentBook.id}`
-      : ''
+    currentCompany && currentBook ? `${currentCompany.id}:${currentBook.id}` : ''
   const dashboard =
-    currentDashboardKey && dashboardKey === currentDashboardKey
-      ? loadedDashboard
-      : null
+    currentDashboardKey && dashboardKey === currentDashboardKey ? loadedDashboard : null
   const isCurrentBooksLoading =
     isLoadingBooks ||
     Boolean(currentCompany && booksSettledCompanyId !== currentCompany.id)
@@ -139,7 +110,11 @@ function AccountingApp({
       })
       .catch((requestError: unknown) => {
         if (active) {
-          setError(requestError instanceof Error ? requestError.message : 'No fue posible cargar las empresas.')
+          setError(
+            requestError instanceof Error
+              ? requestError.message
+              : 'No fue posible cargar las empresas.',
+          )
           setIsLoadingCompanies(false)
         }
       })
@@ -151,15 +126,13 @@ function AccountingApp({
   useEffect(() => {
     if (isLoadingCompanies || location.pathname !== '/') return
     if (companies.length === 0) navigate('/companies/new', { replace: true })
-    else if (companies.length === 1) {
+    else if (companies.length === 1)
       navigate(`/companies/${companies[0].id}/dashboard`, { replace: true })
-    } else navigate('/companies', { replace: true })
+    else navigate('/companies', { replace: true })
   }, [companies, isLoadingCompanies, location.pathname, navigate])
 
   useEffect(() => {
-    if (!currentCompany) {
-      return
-    }
+    if (!currentCompany) return
     let active = true
     const savedBookId = sessionStorage.getItem(selectedBookStorageKey(currentCompany.id))
     apiRequest<Book[]>(session, `/api/companies/${currentCompany.id}/books`)
@@ -176,10 +149,7 @@ function AccountingApp({
               : ''
           setSelectedBookId(preferredBookId)
           if (preferredBookId) {
-            sessionStorage.setItem(
-              selectedBookStorageKey(currentCompany.id),
-              preferredBookId,
-            )
+            sessionStorage.setItem(selectedBookStorageKey(currentCompany.id), preferredBookId)
           } else {
             sessionStorage.removeItem(selectedBookStorageKey(currentCompany.id))
           }
@@ -188,7 +158,11 @@ function AccountingApp({
       })
       .catch((requestError: unknown) => {
         if (active) {
-          setError(requestError instanceof Error ? requestError.message : 'No fue posible cargar los libros.')
+          setError(
+            requestError instanceof Error
+              ? requestError.message
+              : 'No fue posible cargar los libros.',
+          )
           setBooksSettledCompanyId(currentCompany.id)
           setIsLoadingBooks(false)
         }
@@ -199,9 +173,7 @@ function AccountingApp({
   }, [booksRefreshVersion, currentCompany, session])
 
   useEffect(() => {
-    if (!currentCompany || !currentBook || activeSection !== 'dashboard') {
-      return
-    }
+    if (!currentCompany || !currentBook || activeSection !== 'dashboard') return
     let active = true
     apiRequest<DashboardData>(
       session,
@@ -218,7 +190,11 @@ function AccountingApp({
       })
       .catch((requestError: unknown) => {
         if (active) {
-          setError(requestError instanceof Error ? requestError.message : 'No fue posible cargar el dashboard.')
+          setError(
+            requestError instanceof Error
+              ? requestError.message
+              : 'No fue posible cargar el dashboard.',
+          )
           setDashboardFetchKey(`${currentCompany.id}:${currentBook.id}`)
           setIsLoadingDashboard(false)
         }
@@ -259,7 +235,9 @@ function AccountingApp({
   )
 
   return (
-    <div className={`workspace${sidebarCollapsed ? ' workspace--collapsed' : ''}${mobileMenuOpen ? ' workspace--mobile-open' : ''}`}>
+    <div
+      className={`workspace${sidebarCollapsed ? ' workspace--collapsed' : ''}${mobileMenuOpen ? ' workspace--mobile-open' : ''}`}
+    >
       {mobileMenuOpen && (
         <button
           aria-label="Cerrar menú"
@@ -349,7 +327,9 @@ function AccountingApp({
                 >
                   {!currentCompany && <option value="">Selecciona una empresa</option>}
                   {companies.map((company) => (
-                    <option key={company.id} value={company.id}>{company.nombre}</option>
+                    <option key={company.id} value={company.id}>
+                      {company.nombre}
+                    </option>
                   ))}
                 </select>
                 <Icon name="chevron" size={16} />
@@ -380,14 +360,13 @@ function AccountingApp({
               >
                 {!books.length && (
                   <option value="">
-                    {isCurrentBooksLoading
-                      ? 'Cargando períodos...'
-                      : 'Sin períodos disponibles'}
+                    {isCurrentBooksLoading ? 'Cargando períodos...' : 'Sin períodos disponibles'}
                   </option>
                 )}
                 {books.map((book) => (
                   <option key={book.id} value={book.id}>
-                    {book.nombre} · {formatDate(book.fechaInicio)} – {formatDate(book.fechaFin)} · {book.estado === 'ABIERTO' ? 'Abierto' : 'Cerrado'}
+                    {book.nombre} · {formatDate(book.fechaInicio)} – {formatDate(book.fechaFin)} ·{' '}
+                    {book.estado === 'ABIERTO' ? 'Abierto' : 'Cerrado'}
                   </option>
                 ))}
               </select>
@@ -477,23 +456,9 @@ function AccountingApp({
                     ) : isCurrentBooksLoading ? (
                       <LoadingMessage text="Cargando períodos contables..." />
                     ) : books.length === 0 ? (
-                      <section className="coming-page">
-                        <span className="coming-icon"><Icon name="calendar" size={24} /></span>
-                        <span className="section-eyebrow">PERÍODO CONTABLE</span>
-                        <h1>Esta empresa aún no tiene períodos</h1>
-                        <p>Registra un período contable para consultar o registrar partidas en el Libro diario.</p>
-                        <button className="primary-button" onClick={() => navigate(`/companies/${currentCompany.id}/periodos`)}>
-                          <Icon name="plus" size={17} />
-                          Crear período
-                        </button>
-                      </section>
+                      <NoPeriods company={currentCompany} navigate={navigate} />
                     ) : (
-                      <section className="coming-page">
-                        <span className="coming-icon"><Icon name="calendar" size={24} /></span>
-                        <span className="section-eyebrow">PERÍODO CONTABLE</span>
-                        <h1>Selecciona un período</h1>
-                        <p>Elige un período en el selector superior para consultar o registrar partidas.</p>
-                      </section>
+                      <SelectPeriod />
                     )
                   ) : activeSection === 'periodos' ? (
                     isCurrentBooksLoading ? (
@@ -508,10 +473,31 @@ function AccountingApp({
                       />
                     )
                   ) : activeSection === 'cuentas' ? (
-                    <AccountCatalogModule
-                      session={session}
-                      company={currentCompany}
-                    />
+                    <AccountCatalogModule session={session} company={currentCompany} />
+                  ) : activeSection === 'terceros' ? (
+                    <TercerosModule session={session} company={currentCompany} />
+                  ) : activeSection === 'dte' ? (
+                    <DteModule session={session} company={currentCompany} />
+                  ) : activeSection === 'libro-iva' ? (
+                    currentBook ? (
+                      <LibroIvaModule
+                        session={session}
+                        company={currentCompany}
+                        book={currentBook}
+                      />
+                    ) : (
+                      <SelectPeriod />
+                    )
+                  ) : activeSection === 'declaracion-iva' ? (
+                    currentBook ? (
+                      <DeclaracionIvaModule
+                        session={session}
+                        company={currentCompany}
+                        book={currentBook}
+                      />
+                    ) : (
+                      <SelectPeriod />
+                    )
                   ) : (
                     <ComingSoon title={pageTitle} />
                   )
@@ -536,6 +522,47 @@ function LoadingMessage({ text }: { text: string }) {
       <span className="loading-spinner" />
       {text}
     </div>
+  )
+}
+
+function NoPeriods({
+  company,
+  navigate,
+}: {
+  company: Company
+  navigate: ReturnType<typeof useNavigate>
+}) {
+  return (
+    <section className="coming-page">
+      <span className="coming-icon">
+        <Icon name="calendar" size={24} />
+      </span>
+      <span className="section-eyebrow">PERÍODO CONTABLE</span>
+      <h1>Esta empresa aún no tiene períodos</h1>
+      <p>
+        Registra un período contable para consultar o registrar partidas en el Libro diario.
+      </p>
+      <button
+        className="primary-button"
+        onClick={() => navigate(`/companies/${company.id}/periodos`)}
+      >
+        <Icon name="plus" size={17} />
+        Crear período
+      </button>
+    </section>
+  )
+}
+
+function SelectPeriod() {
+  return (
+    <section className="coming-page">
+      <span className="coming-icon">
+        <Icon name="calendar" size={24} />
+      </span>
+      <span className="section-eyebrow">PERÍODO CONTABLE</span>
+      <h1>Selecciona un período</h1>
+      <p>Elige un período en el selector superior para continuar.</p>
+    </section>
   )
 }
 
@@ -567,7 +594,9 @@ function CompanyPicker({
       </div>
       {companies.length === 0 ? (
         <div className="empty-card company-empty">
-          <span className="empty-icon"><Icon name="building" size={24} /></span>
+          <span className="empty-icon">
+            <Icon name="building" size={24} />
+          </span>
           <h2>Aún no tienes empresas</h2>
           <p>Registra tu primera empresa para comenzar a organizar tu contabilidad.</p>
           <button className="primary-button" onClick={onCreate}>
@@ -577,12 +606,10 @@ function CompanyPicker({
       ) : (
         <div className="company-grid">
           {companies.map((company) => (
-            <button
-              className="company-card"
-              key={company.id}
-              onClick={() => onSelect(company)}
-            >
-              <span className="company-card-icon"><Icon name="building" size={22} /></span>
+            <button className="company-card" key={company.id} onClick={() => onSelect(company)}>
+              <span className="company-card-icon">
+                <Icon name="building" size={22} />
+              </span>
               <span className="company-card-copy">
                 <strong>{company.nombre}</strong>
                 <span>{company.nit ? `NIT ${company.nit}` : 'Empresa'}</span>
@@ -607,21 +634,41 @@ function NewCompany({
 }) {
   const [name, setName] = useState('')
   const [nit, setNit] = useState('')
+  const [nrc, setNrc] = useState('')
+  const [tipoContribuyente, setTipoContribuyente] = useState<TipoContribuyente>('PEQUENO')
+  const [inscritoDte, setInscritoDte] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  const nitPattern = /^\d{4}-\d{6}-\d{3}-\d{1}$/
+  const nitValido = nit.trim() === '' || nitPattern.test(nit.trim())
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
+    if (!nitValido) {
+      setError('El NIT debe tener el formato ####-######-###-#.')
+      return
+    }
     setSubmitting(true)
     try {
       const company = await apiRequest<Company>(session, '/api/companies', {
         method: 'POST',
-        body: JSON.stringify({ nombre: name.trim(), nit: nit.trim() || null }),
+        body: JSON.stringify({
+          nombre: name.trim(),
+          nit: nit.trim() || null,
+          nrc: nrc.trim() || null,
+          tipoContribuyente,
+          inscritoDte,
+        }),
       })
       onCreated(company)
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'No fue posible registrar la empresa.')
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'No fue posible registrar la empresa.',
+      )
     } finally {
       setSubmitting(false)
     }
@@ -637,10 +684,15 @@ function NewCompany({
         </div>
       </div>
       <form className="company-form-card" onSubmit={handleSubmit}>
-        <div className="company-form-icon"><Icon name="building" size={22} /></div>
+        <div className="company-form-icon">
+          <Icon name="building" size={22} />
+        </div>
         <h2>Datos de la empresa</h2>
         <p>Podrás administrar sus libros contables desde un mismo lugar.</p>
-        <label htmlFor="company-name">Nombre de la empresa <span aria-hidden="true">*</span></label>
+
+        <label htmlFor="company-name">
+          Nombre de la empresa <span aria-hidden="true">*</span>
+        </label>
         <input
           id="company-name"
           value={name}
@@ -650,17 +702,91 @@ function NewCompany({
           placeholder="Ej. Mi Empresa, S.A. de C.V."
           required
         />
-        <label htmlFor="company-nit">NIT <span className="optional-label">Opcional</span></label>
+
+        <label htmlFor="company-nit">
+          NIT <span className="optional-label">Opcional</span>
+        </label>
         <input
           id="company-nit"
           value={nit}
           onChange={(event) => setNit(event.target.value)}
           maxLength={20}
-          placeholder="Número de identificación tributaria"
+          placeholder="####-######-###-#"
         />
-        {error && <p className="form-error" role="alert">{error}</p>}
+        {!nitValido && (
+          <p className="form-error" role="alert">
+            El NIT debe tener el formato ####-######-###-#.
+          </p>
+        )}
+
+        <label htmlFor="company-nrc">
+          NRC <span className="optional-label">Opcional</span>
+        </label>
+        <input
+          id="company-nrc"
+          value={nrc}
+          onChange={(event) => setNrc(event.target.value)}
+          maxLength={20}
+          placeholder="Número de registro de contribuyente"
+        />
+
+        <label htmlFor="company-tipo">
+          Tipo de contribuyente <span aria-hidden="true">*</span>
+        </label>
+        <select
+          id="company-tipo"
+          value={tipoContribuyente}
+          onChange={(event) => setTipoContribuyente(event.target.value as TipoContribuyente)}
+          required
+          style={{
+            width: '100%',
+            height: '41px',
+            padding: '0 12px',
+            border: '1px solid #e0e5eb',
+            borderRadius: '6px',
+            outline: 'none',
+            color: '#35465a',
+            background: '#fff',
+            fontSize: '11px',
+          }}
+        >
+          <option value="GRAN_CONTRIBUYENTE">Gran Contribuyente</option>
+          <option value="MEDIANO">Mediano Contribuyente</option>
+          <option value="PEQUENO">Pequeño Contribuyente</option>
+          <option value="EXENTO">Exento</option>
+        </select>
+
+        <label
+          htmlFor="company-dte"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            marginTop: '16px',
+            fontSize: '11px',
+            fontWeight: 600,
+            color: '#485a70',
+          }}
+        >
+          <input
+            id="company-dte"
+            type="checkbox"
+            checked={inscritoDte}
+            onChange={(event) => setInscritoDte(event.target.checked)}
+            style={{ width: '15px', height: '15px', accentColor: '#385f86' }}
+          />
+          La empresa está inscrita en DTE
+        </label>
+
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
         <div className="form-actions">
-          <button className="secondary-button" type="button" onClick={onCancel}>Cancelar</button>
+          <button className="secondary-button" type="button" onClick={onCancel}>
+            Cancelar
+          </button>
           <button className="primary-button" type="submit" disabled={submitting}>
             {submitting ? 'Guardando...' : 'Crear empresa'}
           </button>
@@ -684,11 +810,13 @@ function Dashboard({
   onNavigate: (section: string) => void
 }) {
   const stats = [
-    { label: 'Total de activos', icon: 'assets' as const, value: data ? formatAmount(data.assets) : '—' },
-    { label: 'Total de pasivos', icon: 'liabilities' as const, value: data ? formatAmount(data.liabilities) : '—' },
-    { label: 'Patrimonio', icon: 'equity' as const, value: data ? formatAmount(data.equity) : '—' },
+    { label: 'Total de activos', icon: 'assets' as const, value: data ? formatMoney(data.assets) : '—' },
+    { label: 'Total de pasivos', icon: 'liabilities' as const, value: data ? formatMoney(data.liabilities) : '—' },
+    { label: 'Patrimonio', icon: 'equity' as const, value: data ? formatMoney(data.equity) : '—' },
     { label: 'Partidas contabilizadas', icon: 'entry' as const, value: data ? String(data.entryCount) : '—' },
   ]
+
+  const iva = data?.iva
 
   return (
     <div className="dashboard-page">
@@ -696,7 +824,9 @@ function Dashboard({
         <div>
           <span className="section-eyebrow">RESUMEN CONTABLE</span>
           <h1>Dashboard</h1>
-          <p>Bienvenido, aquí tienes el resumen de <strong>{company.nombre}</strong>.</p>
+          <p>
+            Bienvenido, aquí tienes el resumen de <strong>{company.nombre}</strong>.
+          </p>
         </div>
         <button className="primary-button" onClick={() => onNavigate('diario')}>
           <Icon name="plus" size={18} />
@@ -709,17 +839,74 @@ function Dashboard({
           <article className="stat-card" key={stat.label}>
             <div className="stat-topline">
               <span>{stat.label}</span>
-              <span className="stat-icon"><Icon name={stat.icon} size={19} /></span>
+              <span className="stat-icon">
+                <Icon name={stat.icon} size={19} />
+              </span>
             </div>
-            <strong className="stat-value">{loading ? <span className="value-skeleton" /> : stat.value}</strong>
+            <strong className="stat-value">
+              {loading ? <span className="value-skeleton" /> : stat.value}
+            </strong>
             <span className="stat-caption">
               {stat.label === 'Partidas contabilizadas'
-                ? book ? `En ${book.nombre}` : 'Selecciona un período'
+                ? book
+                  ? `En ${book.nombre}`
+                  : 'Selecciona un período'
                 : 'Según movimientos contabilizados'}
             </span>
           </article>
         ))}
       </section>
+
+      {iva && (
+        <section className="stats-grid" aria-label="Posición de IVA">
+          <article className="stat-card">
+            <div className="stat-topline">
+              <span>IVA Débito Fiscal</span>
+              <span className="stat-icon">
+                <Icon name="vat" size={19} />
+              </span>
+            </div>
+            <strong className="stat-value">{loading ? <span className="value-skeleton" /> : formatMoney(iva.debito)}</strong>
+            <span className="stat-caption">Ventas del período</span>
+          </article>
+          <article className="stat-card">
+            <div className="stat-topline">
+              <span>IVA Crédito Fiscal</span>
+              <span className="stat-icon">
+                <Icon name="vat" size={19} />
+              </span>
+            </div>
+            <strong className="stat-value">{loading ? <span className="value-skeleton" /> : formatMoney(iva.credito)}</strong>
+            <span className="stat-caption">Compras del período</span>
+          </article>
+          <article className="stat-card">
+            <div className="stat-topline">
+              <span>{iva.aPagar > 0 ? 'IVA a pagar' : 'Remanente IVA'}</span>
+              <span className="stat-icon">
+                <Icon name="closing" size={19} />
+              </span>
+            </div>
+            <strong className="stat-value">
+              {loading
+                ? <span className="value-skeleton" />
+                : formatMoney(iva.aPagar > 0 ? iva.aPagar : iva.remanente)}
+            </strong>
+            <span className="stat-caption">
+              {iva.aPagar > 0 ? 'Según F-07 del período' : 'A favor del período siguiente'}
+            </span>
+          </article>
+          <article className="stat-card">
+            <div className="stat-topline">
+              <span>IVA Percibido 1%</span>
+              <span className="stat-icon">
+                <Icon name="entry" size={19} />
+              </span>
+            </div>
+            <strong className="stat-value">{loading ? <span className="value-skeleton" /> : formatMoney(iva.percibido)}</strong>
+            <span className="stat-caption">Retenciones a favor</span>
+          </article>
+        </section>
+      )}
 
       <div className="dashboard-columns">
         <section className="content-card recent-card">
@@ -767,18 +954,33 @@ function Dashboard({
           </div>
           <div className="quick-links">
             <button onClick={() => onNavigate('diario')}>
-              <span className="quick-icon"><Icon name="plus" size={19} /></span>
-              <span><strong>Nueva partida</strong><small>Ir al libro diario</small></span>
+              <span className="quick-icon">
+                <Icon name="plus" size={19} />
+              </span>
+              <span>
+                <strong>Nueva partida</strong>
+                <small>Ir al libro diario</small>
+              </span>
               <Icon name="arrow" size={17} />
             </button>
-            <button onClick={() => onNavigate('diario')}>
-              <span className="quick-icon"><Icon name="journal" size={19} /></span>
-              <span><strong>Consultar libro diario</strong><small>Revisar movimientos</small></span>
+            <button onClick={() => onNavigate('libro-iva')}>
+              <span className="quick-icon">
+                <Icon name="vat" size={19} />
+              </span>
+              <span>
+                <strong>Libro de IVA</strong>
+                <small>Ventas y compras</small>
+              </span>
               <Icon name="arrow" size={17} />
             </button>
-            <button onClick={() => onNavigate('balance')}>
-              <span className="quick-icon"><Icon name="balance" size={19} /></span>
-              <span><strong>Consultar balance</strong><small>Ver saldos contables</small></span>
+            <button onClick={() => onNavigate('declaracion-iva')}>
+              <span className="quick-icon">
+                <Icon name="closing" size={19} />
+              </span>
+              <span>
+                <strong>Declaración IVA</strong>
+                <small>Generar F-07</small>
+              </span>
               <Icon name="arrow" size={17} />
             </button>
           </div>
@@ -786,14 +988,16 @@ function Dashboard({
       </div>
 
       {data && data.entryCount > 0 && (
-        <section className={`content-card accounting-status${data.balanced ? ' accounting-status--balanced' : ' accounting-status--warning'}`}>
+        <section
+          className={`content-card accounting-status${data.balanced ? ' accounting-status--balanced' : ' accounting-status--warning'}`}
+        >
           <div className="status-indicator" />
           <div className="status-copy">
             <h2>{data.balanced ? 'Partidas en equilibrio' : 'Se detectó una diferencia'}</h2>
             <p>
               {data.balanced
-                ? `Las partidas contabilizadas están cuadradas: debe ${formatAmount(data.totalDebe)} y haber ${formatAmount(data.totalHaber)}.`
-                : `Debe ${formatAmount(data.totalDebe)} · Haber ${formatAmount(data.totalHaber)} · Diferencia ${formatAmount(Math.abs(data.balanceDifference))}.`}
+                ? `Las partidas contabilizadas están cuadradas: debe ${formatMoney(data.totalDebe)} y haber ${formatMoney(data.totalHaber)}.`
+                : `Debe ${formatMoney(data.totalDebe)} · Haber ${formatMoney(data.totalHaber)} · Diferencia ${formatMoney(Math.abs(data.balanceDifference))}.`}
             </p>
           </div>
           <span className="status-count">{data.entryCount} contabilizadas</span>
@@ -802,10 +1006,15 @@ function Dashboard({
 
       {!book && !loading && (
         <section className="content-card no-period-note">
-          <span className="note-icon"><Icon name="calendar" size={18} /></span>
+          <span className="note-icon">
+            <Icon name="calendar" size={18} />
+          </span>
           <div>
             <strong>Esta empresa todavía no tiene períodos contables.</strong>
-            <p>Los indicadores financieros se mostrarán cuando existan libros y partidas contabilizadas.</p>
+            <p>
+              Los indicadores financieros se mostrarán cuando existan libros y partidas
+              contabilizadas.
+            </p>
           </div>
           <button className="text-button" onClick={() => onNavigate('periodos')}>
             Ver períodos <Icon name="arrow" size={16} />
@@ -819,7 +1028,9 @@ function Dashboard({
 function EmptyActivity({ title, message }: { title: string; message: string }) {
   return (
     <div className="empty-activity">
-      <span className="empty-activity-icon"><Icon name="journal" size={21} /></span>
+      <span className="empty-activity-icon">
+        <Icon name="journal" size={21} />
+      </span>
       <strong>{title}</strong>
       <p>{message}</p>
     </div>
@@ -829,11 +1040,18 @@ function EmptyActivity({ title, message }: { title: string; message: string }) {
 function ComingSoon({ title }: { title: string }) {
   return (
     <section className="coming-page">
-      <span className="coming-icon"><Icon name="ledger" size={24} /></span>
+      <span className="coming-icon">
+        <Icon name="ledger" size={24} />
+      </span>
       <span className="section-eyebrow">MÓDULO CONTABLE</span>
       <h1>{title}</h1>
-      <p>Esta sección estará disponible próximamente. Por ahora puedes consultar el resumen en tu Dashboard.</p>
-      <Link className="secondary-button" to="../dashboard">Volver al Dashboard</Link>
+      <p>
+        Esta sección estará disponible próximamente. Por ahora puedes consultar el resumen en
+        tu Dashboard.
+      </p>
+      <Link className="secondary-button" to="../dashboard">
+        Volver al Dashboard
+      </Link>
     </section>
   )
 }

@@ -1,0 +1,454 @@
+.terceros-module {
+    width: 100%;
+}
+
+.terceros-heading {
+    align-items: flex-end;
+    margin-bottom: 20px;
+}
+
+.terceros-heading p {
+    margin: 8px 0 0;
+    color: #7d8998;
+    font-size: 11px;
+}
+
+.terceros-heading p strong {
+    color: #46596f;
+    font-weight: 600;
+}
+
+.terceros-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.terceros-search {
+    display: flex;
+    min-width: 180px;
+    height: 38px;
+    flex: 1;
+    align-items: center;
+    gap: 9px;
+    padding: 0 11px;
+    border: 1px solid #e5e9ef;
+    border-radius: 6px;
+    color: #8793a1;
+    background: #fff;
+}
+
+.terceros-search:focus-within {
+    border-color: #9aafc4;
+    box-shadow: 0 0 0 3px #edf3f8;
+}
+
+.terceros-search input {
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    color: #35495f;
+    background: transparent;
+    font: inherit;
+    font-size: 11px;
+}
+
+.terceros-search input::placeholder {
+    color: #9aa4b1;
+}
+
+.terceros-filter {
+    display: flex;
+    height: 38px;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    border: 1px solid #e5e9ef;
+    border-radius: 6px;
+    color: #718094;
+    background: #fff;
+    font-size: 10px;
+}
+
+.terceros-filter select {
+    appearance: none;
+    padding: 0 18px 0 0;
+    border: 0;
+    outline: 0;
+    color: #40546b;
+    background: transparent;
+    font: inherit;
+    font-size: 10px;
+}
+
+.terceros-card {
+    overflow: hidden;
+    border: 1px solid #e7ebf0;
+    border-radius: 9px;
+    background: #fff;
+}
+
+.terceros-table-scroll {
+    overflow-x: auto;
+}
+
+.terceros-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    min-width: 800px;
+}
+
+.terceros-table th {
+    padding: 12px 16px;
+    border-bottom: 1px solid #edf0f4;
+    color: #8994a1;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.55px;
+    white-space: nowrap;
+}
+
+.terceros-table td {
+    padding: 13px 16px;
+    border-bottom: 1px solid #f0f2f5;
+    color: #667487;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.terceros-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.terceros-name {
+    color: #30455d;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.terceros-nit {
+    font-variant-numeric: tabular-nums;
+    color: #52657a;
+}
+
+.terceros-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 9px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.terceros-badge--cliente {
+    color: #327353;
+    background: #edf7f0;
+}
+
+.terceros-badge--proveedor {
+    color: #8a5f2a;
+    background: #fbf3e6;
+}
+
+.terceros-badge--ambos {
+    color: #38547d;
+    background: #eef3f9;
+}
+
+.terceros-badge--gran {
+    color: #7b3b8f;
+    background: #f4ecf7;
+}
+
+.terceros-badge--mediano {
+    color: #38547d;
+    background: #eef3f9;
+}
+
+.terceros-badge--pequeno {
+    color: #4a6b60;
+    background: #ecf3f0;
+}
+
+.terceros-badge--exento {
+    color: #7c6f52;
+    background: #f3f1e9;
+}
+
+.terceros-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 9px;
+    white-space: nowrap;
+}
+
+.terceros-status--activo {
+    color: #327353;
+    background: #edf7f0;
+}
+
+.terceros-status--inactivo {
+    color: #8b95a1;
+    background: #f0f2f4;
+}
+
+.terceros-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 4px;
+}
+
+.terceros-actions button {
+    min-height: 28px;
+    padding: 0 8px;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    color: #385978;
+    background: transparent;
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.terceros-actions button:hover:not(:disabled) {
+    border-color: #e3e9ef;
+    background: #f7f9fb;
+}
+
+.terceros-actions button:last-child {
+    color: #8d5c36;
+}
+
+.terceros-actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+.terceros-empty {
+    display: flex;
+    min-height: 240px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 25px;
+    text-align: center;
+}
+
+.terceros-empty-icon {
+    display: grid;
+    width: 48px;
+    height: 48px;
+    place-items: center;
+    border-radius: 13px;
+    color: #54718f;
+    background: #f0f4f8;
+}
+
+.terceros-empty h2 {
+    margin: 5px 0 0;
+    color: #344a63;
+    font-family: Manrope, sans-serif;
+    font-size: 15px;
+}
+
+.terceros-empty p {
+    max-width: 380px;
+    margin: 0 0 12px;
+    color: #8793a1;
+    font-size: 11px;
+    line-height: 1.6;
+}
+
+.terceros-notice {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    border: 1px solid;
+    border-radius: 7px;
+    font-size: 11px;
+}
+
+.terceros-notice>span {
+    flex: 1;
+}
+
+.terceros-notice>button {
+    display: grid;
+    width: 25px;
+    height: 25px;
+    place-items: center;
+    border: 0;
+    border-radius: 4px;
+    color: inherit;
+    background: transparent;
+}
+
+.terceros-notice--success {
+    border-color: #d3e9dc;
+    color: #327353;
+    background: #f1f8f3;
+}
+
+.terceros-notice--error {
+    border-color: #efd8d5;
+    color: #9b4545;
+    background: #fff7f6;
+}
+
+/* Modal */
+
+.terceros-modal-backdrop {
+    position: fixed;
+    z-index: 110;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow-y: auto;
+    padding: 20px;
+    background: rgba(23, 38, 57, 0.4);
+}
+
+.terceros-modal {
+    width: min(100%, 600px);
+    max-height: 92vh;
+    overflow-y: auto;
+    border: 1px solid #e4e9ef;
+    border-radius: 11px;
+    background: #fff;
+    box-shadow: 0 18px 60px rgba(23, 38, 57, 0.18);
+}
+
+.terceros-modal-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 21px 24px 17px;
+    border-bottom: 1px solid #edf0f4;
+}
+
+.terceros-modal-heading h2 {
+    margin: 5px 0 0;
+    color: #30455d;
+    font-family: Manrope, sans-serif;
+    font-size: 18px;
+}
+
+.terceros-modal-heading p {
+    margin: 6px 0 0;
+    color: #8793a1;
+    font-size: 10px;
+}
+
+.terceros-modal-close {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 0;
+    border-radius: 6px;
+    color: #748194;
+    background: transparent;
+}
+
+.terceros-modal-close:hover:not(:disabled) {
+    color: #30455d;
+    background: #f2f5f8;
+}
+
+.terceros-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    padding: 19px 24px 22px;
+}
+
+.terceros-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: #52657a;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.terceros-form label.terceros-form-full {
+    grid-column: 1 / -1;
+}
+
+.terceros-form input,
+.terceros-form select {
+    width: 100%;
+    min-height: 38px;
+    padding: 0 10px;
+    border: 1px solid #e0e6ec;
+    border-radius: 6px;
+    outline: none;
+    color: #35495f;
+    background: #fff;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 400;
+}
+
+.terceros-form input:focus,
+.terceros-form select:focus {
+    border-color: #91a9c1;
+    box-shadow: 0 0 0 3px #edf3f8;
+}
+
+.terceros-form small {
+    color: #8a95a2;
+    font-size: 9px;
+    font-weight: 400;
+}
+
+.terceros-form-error {
+    grid-column: 1 / -1;
+    margin: 0;
+    color: #a54747;
+    font-size: 10px;
+    line-height: 1.5;
+}
+
+.terceros-form-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 6px;
+    padding-top: 14px;
+    border-top: 1px solid #edf0f4;
+}
+
+.terceros-form-actions button {
+    min-height: 36px;
+    font-size: 10px;
+}
+
+@media (max-width: 720px) {
+    .terceros-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .terceros-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .terceros-form {
+        grid-template-columns: 1fr;
+    }
+}

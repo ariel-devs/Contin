@@ -1,0 +1,270 @@
+.declaracion-iva-module {
+    width: 100%;
+}
+
+.declaracion-iva-heading {
+    align-items: flex-end;
+    margin-bottom: 20px;
+}
+
+.declaracion-iva-heading p {
+    margin: 8px 0 0;
+    color: #7d8998;
+    font-size: 11px;
+}
+
+.declaracion-iva-heading p strong {
+    color: #46596f;
+    font-weight: 600;
+}
+
+.declaracion-iva-info {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding: 12px 14px;
+    border: 1px solid #d6e4f0;
+    border-radius: 8px;
+    color: #3d5a78;
+    background: #f3f8fc;
+    font-size: 11px;
+    line-height: 1.6;
+}
+
+.declaracion-iva-info>svg {
+    flex: 0 0 auto;
+    margin-top: 2px;
+    color: #4f7a9f;
+}
+
+.declaracion-iva-info strong {
+    color: #294d77;
+}
+
+.declaracion-iva-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.declaracion-iva-card {
+    padding: 19px 20px;
+    border: 1px solid #e7ebf0;
+    border-radius: 9px;
+    background: #fff;
+}
+
+.declaracion-iva-card h2 {
+    margin: 0 0 14px;
+    color: #30455d;
+    font-family: Manrope, sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.declaracion-iva-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f2f5;
+}
+
+.declaracion-iva-row:last-child {
+    border-bottom: 0;
+}
+
+.declaracion-iva-row span {
+    color: #667487;
+    font-size: 11px;
+}
+
+.declaracion-iva-row strong {
+    color: #2e435c;
+    font-family: Manrope, sans-serif;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+.declaracion-iva-row--total {
+    margin-top: 6px;
+    padding-top: 14px;
+    border-top: 2px solid #d8dee6;
+    border-bottom: 0;
+}
+
+.declaracion-iva-row--total span {
+    color: #293d55;
+    font-weight: 700;
+}
+
+.declaracion-iva-row--total strong {
+    font-size: 18px;
+    letter-spacing: -0.4px;
+}
+
+.declaracion-iva-row--positive strong {
+    color: #9b4545;
+}
+
+.declaracion-iva-row--negative strong {
+    color: #2f6b4f;
+}
+
+.declaracion-iva-status-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.declaracion-iva-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.declaracion-iva-status-badge>span {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.declaracion-iva-status-badge--borrador {
+    color: #8a6c3e;
+    background: #fdf6ea;
+}
+
+.declaracion-iva-status-badge--presentada {
+    color: #327353;
+    background: #edf7f0;
+}
+
+.declaracion-iva-status-badge--pagada {
+    color: #38547d;
+    background: #eef3f9;
+}
+
+.declaracion-iva-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.declaracion-iva-actions button {
+    min-height: 38px;
+    font-size: 11px;
+}
+
+.declaracion-iva-actions-note {
+    margin: 0;
+    color: #8793a1;
+    font-size: 10px;
+    line-height: 1.5;
+}
+
+.declaracion-iva-notice {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    border: 1px solid;
+    border-radius: 7px;
+    font-size: 11px;
+}
+
+.declaracion-iva-notice>span {
+    flex: 1;
+}
+
+.declaracion-iva-notice>button {
+    display: grid;
+    width: 25px;
+    height: 25px;
+    place-items: center;
+    border: 0;
+    border-radius: 4px;
+    color: inherit;
+    background: transparent;
+}
+
+.declaracion-iva-notice--success {
+    border-color: #d3e9dc;
+    color: #327353;
+    background: #f1f8f3;
+}
+
+.declaracion-iva-notice--error {
+    border-color: #efd8d5;
+    color: #9b4545;
+    background: #fff7f6;
+}
+
+.declaracion-iva-loading {
+    display: flex;
+    min-height: 220px;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: #8390a0;
+    font-size: 11px;
+}
+
+.declaracion-iva-empty {
+    display: flex;
+    min-height: 220px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 25px;
+    border: 1px solid #e7ebf0;
+    border-radius: 9px;
+    background: #fff;
+    text-align: center;
+}
+
+.declaracion-iva-empty-icon {
+    display: grid;
+    width: 48px;
+    height: 48px;
+    place-items: center;
+    border-radius: 13px;
+    color: #54718f;
+    background: #f0f4f8;
+}
+
+.declaracion-iva-empty h2 {
+    margin: 5px 0 0;
+    color: #344a63;
+    font-family: Manrope, sans-serif;
+    font-size: 15px;
+}
+
+.declaracion-iva-empty p {
+    max-width: 380px;
+    margin: 0;
+    color: #8793a1;
+    font-size: 11px;
+    line-height: 1.6;
+}
+
+@media (max-width: 760px) {
+    .declaracion-iva-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .declaracion-iva-grid {
+        grid-template-columns: 1fr;
+    }
+}

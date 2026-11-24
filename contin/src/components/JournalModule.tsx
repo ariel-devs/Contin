@@ -10,18 +10,7 @@ import { apiRequest } from '../services/accountingApi'
 import type { Book, Company, LoginSession } from '../types/accounting'
 import { Icon } from './Icon'
 import './JournalModule.css'
-
-type Account = {
-  key: string
-  tipo: 'PREDETERMINADA' | 'PERSONALIZADA'
-  id: number
-  codigo: string
-  nombre: string
-  parentKey: string | null
-  estado: string
-  permiteMovimientos: boolean
-  profundidad: number
-}
+import type { Account } from '../types/accounting'
 
 type JournalLine = {
   id: number

@@ -1,32 +1,33 @@
 import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react'
 import { apiRequest } from '../services/accountingApi'
-import type { Company, LoginSession } from '../types/accounting'
+import type {
+  Account,
+  AccountClassification,
+  AccountNature,
+  Company,
+  LoginSession,
+} from '../types/accounting'
 import { Icon } from './Icon'
 import './AccountCatalogModule.css'
-
-type Account = {
-  key: string
-  tipo: 'PREDETERMINADA' | 'PERSONALIZADA'
-  id: number
-  codigo: string
-  nombre: string
-  clasificacion: string
-  naturaleza: string
-  parentKey: string | null
-  estado: 'ACTIVA' | 'INACTIVA'
-  permiteMovimientos: boolean
-}
 
 type AccountDraft = {
   parentKey: string
   nombre: string
   codigo: string
-  clasificacion: string
-  naturaleza: string
+  clasificacion: AccountClassification | ''
+  naturaleza: AccountNature | ''
   permiteMovimientos: boolean
 }
 
-const classifications = ['ACTIVO', 'PASIVO', 'PATRIMONIO', 'INGRESO', 'COSTO', 'GASTO']
+const classifications: AccountClassification[] = [
+  'ACTIVO',
+  'PASIVO',
+  'PATRIMONIO',
+  'INGRESO',
+  'COSTO',
+  'GASTO',
+]
+
 const emptyDraft: AccountDraft = {
   parentKey: '',
   nombre: '',
@@ -36,19 +37,34 @@ const emptyDraft: AccountDraft = {
   permiteMovimientos: true,
 }
 
-function suggestCode(parent: Account, accounts: Account[]) {
-  const siblings = accounts.filter(
-    (account) => account.parentKey === parent.key && account.codigo.startsWith(`${parent.codigo}.`),
-  )
+/**
+ * Sugiere el siguiente código disponible bajo una cuenta padre.
+ * El catálogo predeterminado usa prefijo sin punto (ej. 1101 → 110101, 110102).
+ * Los códigos personalizados pueden usar punto (ej. 1101.01).
+ */
+function suggestCode(parent: Account, accounts: Account[]): string {
+  const siblings = accounts.filter((account) => account.parentKey === parent.key)
+  if (siblings.length === 0) {
+    // Sin hermanos: usar prefijo sin punto (consistente con catálogo predeterminado)
+    return `${parent.codigo}01`
+  }
+
+  const usesDot = siblings.some((account) => account.codigo.startsWith(`${parent.codigo}.`))
+  const prefix = usesDot ? `${parent.codigo}.` : parent.codigo
   const suffixes = siblings
-    .map((account) => account.codigo.slice(parent.codigo.length + 1))
+    .map((account) =>
+      account.codigo.startsWith(prefix) ? account.codigo.slice(prefix.length) : '',
+    )
     .filter((suffix) => /^\d+$/.test(suffix))
-  const nextNumber = suffixes.reduce(
-    (highest, suffix) => Math.max(highest, Number(suffix)),
-    0,
-  ) + 1
-  const width = suffixes.length > 0 ? Math.max(...suffixes.map((suffix) => suffix.length)) : 2
-  return `${parent.codigo}.${String(nextNumber).padStart(width, '0')}`
+
+  if (suffixes.length === 0) {
+    return usesDot ? `${parent.codigo}.01` : `${parent.codigo}01`
+  }
+
+  const nextNumber = suffixes.reduce((highest, suffix) => Math.max(highest, Number(suffix)), 0) + 1
+  const width = Math.max(...suffixes.map((suffix) => suffix.length))
+  const nextSuffix = String(nextNumber).padStart(width, '0')
+  return usesDot ? `${parent.codigo}.${nextSuffix}` : `${parent.codigo}${nextSuffix}`
 }
 
 function AccountCatalogModule({
@@ -76,20 +92,7 @@ function AccountCatalogModule({
   const loadKey = `${company.id}:${loadVersion}`
   const isLoading = settledLoadKey !== loadKey
 
-  async function loadAccounts() {
-    setLoadError('')
-    try {
-      const result = await apiRequest<Account[]>(
-        session,
-        `/api/companies/${company.id}/accounts`,
-      )
-      setAccounts(result)
-    } catch (error) {
-      setLoadError(error instanceof Error ? error.message : 'No fue posible consultar el catálogo.')
-      throw error
-    }
-  }
-
+  // Efecto único de carga: evita la doble petición anterior.
   useEffect(() => {
     let active = true
     apiRequest<Account[]>(session, `/api/companies/${company.id}/accounts`)
@@ -102,7 +105,9 @@ function AccountCatalogModule({
       })
       .catch((error: unknown) => {
         if (active) {
-          setLoadError(error instanceof Error ? error.message : 'No fue posible consultar el catálogo.')
+          setLoadError(
+            error instanceof Error ? error.message : 'No fue posible consultar el catálogo.',
+          )
           setSettledLoadKey(loadKey)
         }
       })
@@ -110,6 +115,23 @@ function AccountCatalogModule({
       active = false
     }
   }, [company.id, loadKey, session])
+
+  // Alias de la función de recarga para reutilizar en guardar/desactivar.
+  async function reloadAccounts() {
+    setLoadError('')
+    try {
+      const result = await apiRequest<Account[]>(
+        session,
+        `/api/companies/${company.id}/accounts`,
+      )
+      setAccounts(result)
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : 'No fue posible consultar el catálogo.',
+      )
+      throw error
+    }
+  }
 
   const accountByKey = useMemo(
     () => new Map(accounts.map((account) => [account.key, account])),
@@ -233,6 +255,10 @@ function AccountCatalogModule({
       setFormError('El nombre admite hasta 150 caracteres y el código hasta 20.')
       return
     }
+    if (!draft.clasificacion || !draft.naturaleza) {
+      setFormError('Selecciona una cuenta padre válida para heredar clasificación y naturaleza.')
+      return
+    }
 
     setIsSaving(true)
     try {
@@ -247,12 +273,16 @@ function AccountCatalogModule({
           codigo: draft.codigo.trim(),
         }),
       })
-      setNotice(editingAccount ? 'La cuenta se actualizó correctamente.' : 'La cuenta se creó correctamente.')
+      setNotice(
+        editingAccount
+          ? 'La cuenta se actualizó correctamente.'
+          : 'La cuenta se creó correctamente.',
+      )
       setActionError('')
       closeForm()
       setTab('personalizadas')
       try {
-        await loadAccounts()
+        await reloadAccounts()
       } catch (error) {
         setActionError(
           error instanceof Error
@@ -286,7 +316,7 @@ function AccountCatalogModule({
       )
       setNotice(`La cuenta «${account.nombre}» fue desactivada.`)
       try {
-        await loadAccounts()
+        await reloadAccounts()
       } catch (error) {
         setActionError(
           error instanceof Error
@@ -410,7 +440,9 @@ function AccountCatalogModule({
             <span>Clasificación</span>
             <select value={classification} onChange={(event) => setClassification(event.target.value)}>
               <option value="">Todas</option>
-              {classifications.map((item) => <option key={item} value={item}>{item}</option>)}
+              {classifications.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
             </select>
             <Icon name="chevron" size={15} />
           </label>
@@ -421,10 +453,15 @@ function AccountCatalogModule({
         ) : loadError ? (
           <div className="account-empty-message account-empty-message--error" role="alert">
             {loadError}
-            <button className="text-button" onClick={() => {
-              setLoadError('')
-              setLoadVersion((version) => version + 1)
-            }}>Reintentar</button>
+            <button
+              className="text-button"
+              onClick={() => {
+                setLoadError('')
+                setLoadVersion((version) => version + 1)
+              }}
+            >
+              Reintentar
+            </button>
           </div>
         ) : roots.length === 0 ? (
           <div className="account-empty-message">
@@ -454,9 +491,13 @@ function AccountCatalogModule({
       </div>
 
       {isFormOpen && (
-        <div className="account-modal-backdrop" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget && !isSaving) closeForm()
-        }}>
+        <div
+          className="account-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isSaving) closeForm()
+          }}
+        >
           <section className="account-modal" role="dialog" aria-modal="true" aria-labelledby="account-form-title">
             <header className="account-modal-heading">
               <div>
@@ -509,13 +550,23 @@ function AccountCatalogModule({
               <div className="account-form-pair">
                 <label>
                   Clasificación
-                  <select value={draft.clasificacion} disabled={!draft.parentKey} onChange={(event) => setDraft({ ...draft, clasificacion: event.target.value })}>
-                    {draft.clasificacion && <option value={draft.clasificacion}>{draft.clasificacion}</option>}
+                  <select
+                    value={draft.clasificacion}
+                    disabled
+                    aria-readonly="true"
+                  >
+                    {draft.clasificacion && (
+                      <option value={draft.clasificacion}>{draft.clasificacion}</option>
+                    )}
                   </select>
                 </label>
                 <label>
                   Naturaleza
-                  <select value={draft.naturaleza} disabled={!draft.parentKey} onChange={(event) => setDraft({ ...draft, naturaleza: event.target.value })}>
+                  <select
+                    value={draft.naturaleza}
+                    disabled
+                    aria-readonly="true"
+                  >
                     {draft.naturaleza && (
                       <option value={draft.naturaleza}>
                         {draft.naturaleza === 'DEUDORA' ? 'Deudora' : 'Acreedora'}
@@ -528,7 +579,10 @@ function AccountCatalogModule({
                 <input
                   type="checkbox"
                   checked={draft.permiteMovimientos}
-                  disabled={Boolean(editingAccount && accounts.some((account) => account.parentKey === editingAccount.key))}
+                  disabled={Boolean(
+                    editingAccount &&
+                    accounts.some((account) => account.parentKey === editingAccount.key),
+                  )}
                   onChange={(event) => setDraft({ ...draft, permiteMovimientos: event.target.checked })}
                 />
                 <span>
@@ -538,7 +592,9 @@ function AccountCatalogModule({
               </label>
               {formError && <p className="account-form-error" role="alert">{formError}</p>}
               <footer className="account-form-actions">
-                <button type="button" className="secondary-button" onClick={closeForm} disabled={isSaving}>Cancelar</button>
+                <button type="button" className="secondary-button" onClick={closeForm} disabled={isSaving}>
+                  Cancelar
+                </button>
                 <button type="submit" className="primary-button" disabled={isSaving || !draft.parentKey}>
                   {isSaving ? 'Guardando…' : editingAccount ? 'Guardar cambios' : 'Crear cuenta'}
                 </button>
