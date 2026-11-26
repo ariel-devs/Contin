@@ -2849,6 +2849,421 @@ app.get(
   },
 )
 
+app.get(
+  '/api/reportes/balance',
+  authenticate,
+  async (request, response) => {
+    const fechaInicio = parseIsoDate(request.query.fecha_inicio)
+    const fechaFin = parseIsoDate(request.query.fecha_fin)
+    if (!fechaInicio || !fechaFin || fechaInicio > fechaFin) {
+      response.status(400).json({ message: 'Revisa las fechas del período.' })
+      return
+    }
+
+    const rawEmpresa = request.query.id_empresa
+    const companyId =
+      rawEmpresa === undefined
+        ? null
+        : typeof rawEmpresa === 'string'
+          ? parsePositiveId(rawEmpresa)
+          : null
+    if (rawEmpresa !== undefined && companyId === null) {
+      response.status(400).json({ message: 'La empresa seleccionada no es válida.' })
+      return
+    }
+
+    try {
+      const connection = await database.connect()
+      if (
+        companyId !== null &&
+        !(await userOwnsCompany(connection, request.authenticatedUserId!, companyId))
+      ) {
+        response.status(404).json({ message: 'No se encontró la empresa seleccionada.' })
+        return
+      }
+
+      const companyFilter = companyId === null ? '' : 'AND E.id_empresa = @id_empresa'
+      const balanceRequest = connection
+        .request()
+        .input('id_usuario', sql.Int, request.authenticatedUserId!)
+        .input('fecha_fin', sql.Date, fechaFin)
+      if (companyId !== null) balanceRequest.input('id_empresa', sql.Int, companyId)
+
+      type BalanceRow = {
+        tipoCuenta: 'PREDETERMINADA' | 'PERSONALIZADA'
+        idCuenta: number
+        codigo: string
+        nombre: string
+        naturaleza: 'DEUDORA' | 'ACREEDORA'
+        debe: number | string
+        haber: number | string
+      }
+
+      const result = await balanceRequest.query<BalanceRow>(
+        `WITH Base AS (
+           SELECT
+             M.id_cuenta_predeterminada,
+             M.id_cuenta_personalizada,
+             M.debe,
+             M.haber,
+             E.id_empresa
+           FROM MOVIMIENTO M
+           INNER JOIN PARTIDA P ON P.id_partida = M.id_partida
+           INNER JOIN LIBRO L ON L.id_libro = P.id_libro
+           INNER JOIN EMPRESA E ON E.id_empresa = L.id_empresa
+           WHERE E.id_usuario = @id_usuario
+             AND P.estado = 'CONTABILIZADA'
+             AND P.fecha <= @fecha_fin
+             ${companyFilter}
+         ),
+         Movimientos AS (
+           SELECT
+             'PREDETERMINADA' AS tipoCuenta,
+             B.id_cuenta_predeterminada AS idCuenta,
+             CP.codigo,
+             CP.nombre,
+             CP.naturaleza,
+             B.debe,
+             B.haber
+           FROM Base B
+           INNER JOIN CUENTA_PREDETERMINADA CP ON CP.id_cuenta = B.id_cuenta_predeterminada
+           WHERE B.id_cuenta_predeterminada IS NOT NULL
+           UNION ALL
+           SELECT
+             'PERSONALIZADA' AS tipoCuenta,
+             B.id_cuenta_personalizada AS idCuenta,
+             CC.codigo,
+             CC.nombre,
+             CC.naturaleza,
+             B.debe,
+             B.haber
+           FROM Base B
+           INNER JOIN CUENTA_PERSONALIZADA CC
+             ON CC.id_cuenta = B.id_cuenta_personalizada
+            AND CC.id_empresa = B.id_empresa
+           WHERE B.id_cuenta_personalizada IS NOT NULL
+         )
+         SELECT
+           tipoCuenta,
+           idCuenta,
+           codigo,
+           nombre,
+           naturaleza,
+           CAST(CASE WHEN SUM(debe) > SUM(haber) THEN SUM(debe) - SUM(haber) ELSE 0 END AS DECIMAL(12,2)) AS debe,
+           CAST(CASE WHEN SUM(haber) > SUM(debe) THEN SUM(haber) - SUM(debe) ELSE 0 END AS DECIMAL(12,2)) AS haber
+         FROM Movimientos
+         GROUP BY tipoCuenta, idCuenta, codigo, nombre, naturaleza
+         HAVING SUM(debe) <> SUM(haber)
+         ORDER BY codigo, tipoCuenta, idCuenta`,
+      )
+
+      const cuentas = result.recordset.map((row) => ({
+        tipoCuenta: row.tipoCuenta,
+        idCuenta: Number(row.idCuenta),
+        codigo: row.codigo,
+        nombre: row.nombre,
+        naturaleza: row.naturaleza,
+        debe: Number(row.debe),
+        haber: Number(row.haber),
+      }))
+      const round = (value: number) => Math.round(value * 100) / 100
+      const totalDebe = round(cuentas.reduce((sum, cuenta) => sum + cuenta.debe, 0))
+      const totalHaber = round(cuentas.reduce((sum, cuenta) => sum + cuenta.haber, 0))
+      const diferencia = round(totalDebe - totalHaber)
+
+      response.json({
+        cuentas,
+        totales: {
+          totalDebe,
+          totalHaber,
+          diferencia,
+          cuadra: Math.abs(diferencia) < 0.005,
+        },
+      })
+    } catch (error) {
+      console.error('Error al consultar balance de comprobación:', error)
+      response.status(500).json({ message: 'No fue posible consultar el balance de comprobación.' })
+    }
+  },
+)
+
+app.get(
+  '/api/reportes/iva',
+  authenticate,
+  async (request, response) => {
+    const fechaInicio = parseIsoDate(request.query.fecha_inicio)
+    const fechaFin = parseIsoDate(request.query.fecha_fin)
+    if (!fechaInicio || !fechaFin || fechaInicio > fechaFin) {
+      response.status(400).json({ message: 'Revisa las fechas del período.' })
+      return
+    }
+
+    const rawEmpresa = request.query.id_empresa
+    const companyId =
+      rawEmpresa === undefined
+        ? null
+        : typeof rawEmpresa === 'string'
+          ? parsePositiveId(rawEmpresa)
+          : null
+    if (rawEmpresa !== undefined && companyId === null) {
+      response.status(400).json({ message: 'La empresa seleccionada no es válida.' })
+      return
+    }
+
+    try {
+      const connection = await database.connect()
+      if (
+        companyId !== null &&
+        !(await userOwnsCompany(connection, request.authenticatedUserId!, companyId))
+      ) {
+        response.status(404).json({ message: 'No se encontró la empresa seleccionada.' })
+        return
+      }
+
+      const companyFilter = companyId === null ? '' : 'AND E.id_empresa = @id_empresa'
+      const ivaRequest = connection
+        .request()
+        .input('id_usuario', sql.Int, request.authenticatedUserId!)
+        .input('fecha_inicio', sql.Date, fechaInicio)
+        .input('fecha_fin', sql.Date, fechaFin)
+      if (companyId !== null) ivaRequest.input('id_empresa', sql.Int, companyId)
+
+      type IvaRow = {
+        fecha: string
+        partida: number | string
+        cuenta: string
+        concepto: string
+        debe: number | string
+        haber: number | string
+      }
+
+      const result = await ivaRequest.query<IvaRow>(
+        `WITH Movimientos AS (
+           SELECT
+             CONVERT(varchar(10), P.fecha, 23) AS fecha,
+             P.numero_partida AS partida,
+             CP.codigo + ' · ' + CP.nombre AS cuenta,
+             P.concepto,
+             M.debe,
+             M.haber
+           FROM MOVIMIENTO M
+           INNER JOIN PARTIDA P ON P.id_partida = M.id_partida
+           INNER JOIN LIBRO L ON L.id_libro = P.id_libro
+           INNER JOIN EMPRESA E ON E.id_empresa = L.id_empresa
+           INNER JOIN CUENTA_PREDETERMINADA CP ON CP.id_cuenta = M.id_cuenta_predeterminada
+           WHERE E.id_usuario = @id_usuario
+             AND P.estado = 'CONTABILIZADA'
+             AND P.fecha BETWEEN @fecha_inicio AND @fecha_fin
+             AND (UPPER(CP.codigo) LIKE '%IVA%' OR UPPER(CP.nombre) LIKE '%IVA%')
+             ${companyFilter}
+           UNION ALL
+           SELECT
+             CONVERT(varchar(10), P.fecha, 23) AS fecha,
+             P.numero_partida AS partida,
+             CC.codigo + ' · ' + CC.nombre AS cuenta,
+             P.concepto,
+             M.debe,
+             M.haber
+           FROM MOVIMIENTO M
+           INNER JOIN PARTIDA P ON P.id_partida = M.id_partida
+           INNER JOIN LIBRO L ON L.id_libro = P.id_libro
+           INNER JOIN EMPRESA E ON E.id_empresa = L.id_empresa
+           INNER JOIN CUENTA_PERSONALIZADA CC
+             ON CC.id_cuenta = M.id_cuenta_personalizada
+            AND CC.id_empresa = E.id_empresa
+           WHERE E.id_usuario = @id_usuario
+             AND P.estado = 'CONTABILIZADA'
+             AND P.fecha BETWEEN @fecha_inicio AND @fecha_fin
+             AND (UPPER(CC.codigo) LIKE '%IVA%' OR UPPER(CC.nombre) LIKE '%IVA%')
+             ${companyFilter}
+         )
+         SELECT fecha, partida, cuenta, concepto, debe, haber
+         FROM Movimientos
+         ORDER BY fecha, partida, cuenta`,
+      )
+
+      const movimientos = result.recordset.map((row) => ({
+        fecha: row.fecha,
+        partida: Number(row.partida),
+        cuenta: row.cuenta,
+        concepto: row.concepto,
+        debe: Number(row.debe),
+        haber: Number(row.haber),
+      }))
+      const round = (value: number) => Math.round(value * 100) / 100
+      const ivaDebe = round(movimientos.reduce((sum, movimiento) => sum + movimiento.debe, 0))
+      const ivaHaber = round(movimientos.reduce((sum, movimiento) => sum + movimiento.haber, 0))
+
+      response.json({
+        movimientos,
+        totales: { ivaDebe, ivaHaber },
+      })
+    } catch (error) {
+      console.error('Error al consultar libro de IVA:', error)
+      response.status(500).json({ message: 'No fue posible consultar el libro de IVA.' })
+    }
+  },
+)
+
+app.get(
+  '/api/reportes/partidas-cierre',
+  authenticate,
+  async (request, response) => {
+    const fechaInicio = parseIsoDate(request.query.fecha_inicio)
+    const fechaFin = parseIsoDate(request.query.fecha_fin)
+    if (!fechaInicio || !fechaFin || fechaInicio > fechaFin) {
+      response.status(400).json({ message: 'Revisa las fechas del período.' })
+      return
+    }
+
+    const rawEmpresa = request.query.id_empresa
+    const companyId =
+      rawEmpresa === undefined
+        ? null
+        : typeof rawEmpresa === 'string'
+          ? parsePositiveId(rawEmpresa)
+          : null
+    if (rawEmpresa !== undefined && companyId === null) {
+      response.status(400).json({ message: 'La empresa seleccionada no es válida.' })
+      return
+    }
+
+    try {
+      const connection = await database.connect()
+      if (
+        companyId !== null &&
+        !(await userOwnsCompany(connection, request.authenticatedUserId!, companyId))
+      ) {
+        response.status(404).json({ message: 'No se encontró la empresa seleccionada.' })
+        return
+      }
+
+      const companyFilter = companyId === null ? '' : 'AND E.id_empresa = @id_empresa'
+      const buildRequest = () => {
+        const cierreRequest = connection
+          .request()
+          .input('id_usuario', sql.Int, request.authenticatedUserId!)
+          .input('fecha_inicio', sql.Date, fechaInicio)
+          .input('fecha_fin', sql.Date, fechaFin)
+        if (companyId !== null) cierreRequest.input('id_empresa', sql.Int, companyId)
+        return cierreRequest
+      }
+
+      const resultadoCte = `WITH Base AS (
+         SELECT
+           P.id_partida,
+           P.numero_partida,
+           CONVERT(varchar(10), P.fecha, 23) AS fecha,
+           P.concepto,
+           COALESCE(CP.clasificacion, CC.clasificacion) AS clasificacion,
+           COALESCE(CP.codigo, CC.codigo) AS codigo,
+           COALESCE(CP.naturaleza, CC.naturaleza) AS naturaleza,
+           M.debe,
+           M.haber
+         FROM MOVIMIENTO M
+         INNER JOIN PARTIDA P ON P.id_partida = M.id_partida
+         INNER JOIN LIBRO L ON L.id_libro = P.id_libro
+         INNER JOIN EMPRESA E ON E.id_empresa = L.id_empresa
+         LEFT JOIN CUENTA_PREDETERMINADA CP ON CP.id_cuenta = M.id_cuenta_predeterminada
+         LEFT JOIN CUENTA_PERSONALIZADA CC
+           ON CC.id_cuenta = M.id_cuenta_personalizada
+          AND CC.id_empresa = E.id_empresa
+         WHERE E.id_usuario = @id_usuario
+           AND P.estado = 'CONTABILIZADA'
+           AND P.fecha BETWEEN @fecha_inicio AND @fecha_fin
+           AND (
+             COALESCE(CP.clasificacion, CC.clasificacion) IN ('INGRESO', 'GASTO', 'COSTO')
+             OR LEFT(COALESCE(CP.codigo, CC.codigo), 1) IN ('4', '5', '6')
+           )
+           ${companyFilter}
+       ),
+       Resultado AS (
+         SELECT
+           id_partida,
+           numero_partida,
+           fecha,
+           concepto,
+           CASE
+             WHEN clasificacion = 'INGRESO' OR LEFT(codigo, 1) = '5' THEN 'INGRESO'
+             WHEN clasificacion IN ('GASTO', 'COSTO') OR LEFT(codigo, 1) IN ('4', '6') THEN 'GASTO'
+           END AS grupo,
+           naturaleza,
+           debe,
+           haber
+         FROM Base
+       )`
+
+      type ResumenRow = {
+        totalIngresos: number | string | null
+        totalGastos: number | string | null
+      }
+      type PartidaRow = {
+        id: number | string
+        numero: number | string
+        fecha: string
+        concepto: string
+        monto: number | string
+      }
+
+      const resumenResult = await buildRequest().query<ResumenRow>(
+        `${resultadoCte}
+         SELECT
+           CAST(SUM(CASE WHEN grupo = 'INGRESO' THEN saldo ELSE 0 END) AS DECIMAL(12,2)) AS totalIngresos,
+           CAST(SUM(CASE WHEN grupo = 'GASTO' THEN saldo ELSE 0 END) AS DECIMAL(12,2)) AS totalGastos
+         FROM (
+           SELECT
+             grupo,
+             SUM(CASE WHEN naturaleza = 'ACREEDORA' THEN haber - debe ELSE debe - haber END) AS saldo
+           FROM Resultado
+           GROUP BY grupo, naturaleza
+         ) Saldos`,
+      )
+
+      const partidasResult = await buildRequest().query<PartidaRow>(
+        `${resultadoCte}
+         SELECT
+           id_partida AS id,
+           numero_partida AS numero,
+           fecha,
+           concepto,
+           CAST(SUM(
+             CASE
+               WHEN grupo = 'INGRESO' THEN haber - debe
+               ELSE -(debe - haber)
+             END
+           ) AS DECIMAL(12,2)) AS monto
+         FROM Resultado
+         GROUP BY id_partida, numero_partida, fecha, concepto
+         ORDER BY fecha, numero_partida`,
+      )
+
+      const round = (value: number) => Math.round(value * 100) / 100
+      const resumenRow = resumenResult.recordset[0]
+      const totalIngresos = round(Number(resumenRow?.totalIngresos ?? 0))
+      const totalGastos = round(Number(resumenRow?.totalGastos ?? 0))
+      const partidas = partidasResult.recordset.map((row) => ({
+        id: Number(row.id),
+        numero: Number(row.numero),
+        fecha: row.fecha,
+        concepto: row.concepto,
+        monto: round(Number(row.monto)),
+      }))
+
+      response.json({
+        resumen: {
+          totalIngresos,
+          totalGastos,
+          utilidadPerdida: round(totalIngresos - totalGastos),
+        },
+        partidas,
+      })
+    } catch (error) {
+      console.error('Error al consultar partidas de cierre:', error)
+      response.status(500).json({ message: 'No fue posible consultar las partidas de cierre.' })
+    }
+  },
+)
+
 /* ============================================================
    START
    ============================================================ */

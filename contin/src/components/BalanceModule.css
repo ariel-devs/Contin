@@ -1,0 +1,200 @@
+.balance-module {
+    width: 100%;
+}
+
+.balance-heading {
+    align-items: flex-end;
+    margin-bottom: 20px;
+}
+
+.balance-heading p {
+    margin: 8px 0 0;
+    color: #7d8998;
+    font-size: 11px;
+}
+
+.balance-heading p strong {
+    color: #46596f;
+    font-weight: 600;
+}
+
+.balance-filters {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.balance-filters label {
+    display: flex;
+    min-width: 190px;
+    flex-direction: column;
+    gap: 6px;
+    color: #52657a;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.balance-filters input {
+    height: 38px;
+    padding: 0 11px;
+    border: 1px solid #e0e6ec;
+    border-radius: 6px;
+    outline: none;
+    color: #35495f;
+    background: #fff;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 400;
+}
+
+.balance-filters input:focus {
+    border-color: #91a9c1;
+    box-shadow: 0 0 0 3px #edf3f8;
+}
+
+.balance-filters button {
+    min-height: 38px;
+}
+
+.balance-error {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    border: 1px solid #efd8d5;
+    border-radius: 7px;
+    color: #9b4545;
+    background: #fff7f6;
+    font-size: 11px;
+}
+
+.balance-card {
+    overflow: hidden;
+    border: 1px solid #e7ebf0;
+    border-radius: 9px;
+    background: #fff;
+}
+
+.balance-table-scroll {
+    overflow-x: auto;
+}
+
+.balance-table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.balance-table th {
+    padding: 12px 16px;
+    border-bottom: 1px solid #edf0f4;
+    color: #8994a1;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.55px;
+    white-space: nowrap;
+}
+
+.balance-table td {
+    padding: 13px 16px;
+    border-bottom: 1px solid #f0f2f5;
+    color: #667487;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.balance-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.balance-code {
+    color: #52657a;
+    font-variant-numeric: tabular-nums;
+}
+
+.balance-name {
+    color: #30455d;
+    font-weight: 600;
+}
+
+.balance-amount {
+    color: #40546b;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.balance-totals td {
+    border-top: 2px solid #dde4ec;
+    border-bottom: 0;
+    font-weight: 700;
+}
+
+.balance-totals--ok td {
+    color: #2f6b4f;
+    background: #f1f8f3;
+}
+
+.balance-totals--error td {
+    color: #9b4545;
+    background: #fff7f6;
+}
+
+.balance-totals-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.balance-empty {
+    display: flex;
+    min-height: 240px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 25px;
+    text-align: center;
+}
+
+.balance-empty-icon {
+    display: grid;
+    width: 48px;
+    height: 48px;
+    place-items: center;
+    border-radius: 13px;
+    color: #54718f;
+    background: #f0f4f8;
+}
+
+.balance-empty h2 {
+    margin: 5px 0 0;
+    color: #344a63;
+    font-family: Manrope, sans-serif;
+    font-size: 15px;
+}
+
+.balance-empty p {
+    margin: 0;
+    color: #8793a1;
+    font-size: 11px;
+    line-height: 1.6;
+}
+
+@media (max-width: 720px) {
+    .balance-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .balance-filters {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .balance-filters label {
+        min-width: 0;
+    }
+}

@@ -121,3 +121,111 @@ export async function getLibroMayor(
   if (params.id_empresa !== undefined) search.set('id_empresa', String(params.id_empresa))
   return apiRequest<LibroMayorData>(token, `/api/reportes/mayor?${search.toString()}`)
 }
+
+export type BalanceParams = {
+  fecha_inicio: string
+  fecha_fin: string
+  id_empresa?: number
+}
+
+export type BalanceCuenta = {
+  tipoCuenta: 'PREDETERMINADA' | 'PERSONALIZADA'
+  idCuenta: number
+  codigo: string
+  nombre: string
+  naturaleza: 'DEUDORA' | 'ACREEDORA'
+  debe: number
+  haber: number
+}
+
+export type BalanceData = {
+  cuentas: BalanceCuenta[]
+  totales: {
+    totalDebe: number
+    totalHaber: number
+    diferencia: number
+    cuadra: boolean
+  }
+}
+
+export async function getBalanceComprobacion(
+  token: string,
+  params: BalanceParams,
+): Promise<BalanceData> {
+  const search = new URLSearchParams({
+    fecha_inicio: params.fecha_inicio,
+    fecha_fin: params.fecha_fin,
+  })
+  if (params.id_empresa !== undefined) search.set('id_empresa', String(params.id_empresa))
+  return apiRequest<BalanceData>(token, `/api/reportes/balance?${search.toString()}`)
+}
+
+export type IvaReporteParams = {
+  fecha_inicio: string
+  fecha_fin: string
+  id_empresa?: number
+}
+
+export type IvaReporteMovimiento = {
+  fecha: string
+  partida: number
+  cuenta: string
+  concepto: string
+  debe: number
+  haber: number
+}
+
+export type IvaReporteData = {
+  movimientos: IvaReporteMovimiento[]
+  totales: {
+    ivaDebe: number
+    ivaHaber: number
+  }
+}
+
+export async function getLibroIva(
+  token: string,
+  params: IvaReporteParams,
+): Promise<IvaReporteData> {
+  const search = new URLSearchParams({
+    fecha_inicio: params.fecha_inicio,
+    fecha_fin: params.fecha_fin,
+  })
+  if (params.id_empresa !== undefined) search.set('id_empresa', String(params.id_empresa))
+  return apiRequest<IvaReporteData>(token, `/api/reportes/iva?${search.toString()}`)
+}
+
+export type CierreParams = {
+  fecha_inicio: string
+  fecha_fin: string
+  id_empresa?: number
+}
+
+export type CierrePartida = {
+  id: number
+  numero: number
+  fecha: string
+  concepto: string
+  monto: number
+}
+
+export type CierreData = {
+  resumen: {
+    totalIngresos: number
+    totalGastos: number
+    utilidadPerdida: number
+  }
+  partidas: CierrePartida[]
+}
+
+export async function getPartidasCierre(
+  token: string,
+  params: CierreParams,
+): Promise<CierreData> {
+  const search = new URLSearchParams({
+    fecha_inicio: params.fecha_inicio,
+    fecha_fin: params.fecha_fin,
+  })
+  if (params.id_empresa !== undefined) search.set('id_empresa', String(params.id_empresa))
+  return apiRequest<CierreData>(token, `/api/reportes/partidas-cierre?${search.toString()}`)
+}
