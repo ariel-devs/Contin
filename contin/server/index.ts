@@ -2688,6 +2688,167 @@ app.get(
   },
 )
 
+app.get(
+  '/api/reportes/mayor',
+  authenticate,
+  async (request, response) => {
+    const fechaInicio = parseIsoDate(request.query.fecha_inicio)
+    const fechaFin = parseIsoDate(request.query.fecha_fin)
+    if (!fechaInicio || !fechaFin || fechaInicio > fechaFin) {
+      response.status(400).json({ message: 'Revisa las fechas del período.' })
+      return
+    }
+
+    const rawEmpresa = request.query.id_empresa
+    const rawCuenta = request.query.id_cuenta
+    const companyId =
+      rawEmpresa === undefined
+        ? null
+        : typeof rawEmpresa === 'string'
+          ? parsePositiveId(rawEmpresa)
+          : null
+    const accountId =
+      rawCuenta === undefined
+        ? null
+        : typeof rawCuenta === 'string'
+          ? parsePositiveId(rawCuenta)
+          : null
+
+    if (
+      (rawEmpresa !== undefined && companyId === null) ||
+      (rawCuenta !== undefined && accountId === null)
+    ) {
+      response.status(400).json({ message: 'La empresa o la cuenta seleccionada no son válidas.' })
+      return
+    }
+
+    try {
+      const connection = await database.connect()
+      if (
+        companyId !== null &&
+        !(await userOwnsCompany(connection, request.authenticatedUserId!, companyId))
+      ) {
+        response.status(404).json({ message: 'No se encontró la empresa seleccionada.' })
+        return
+      }
+
+      const companyFilter = companyId === null ? '' : 'AND E.id_empresa = @id_empresa'
+      const accountFilter =
+        accountId === null
+          ? ''
+          : 'AND (M.id_cuenta_predeterminada = @id_cuenta OR M.id_cuenta_personalizada = @id_cuenta)'
+
+      const mayorRequest = connection
+        .request()
+        .input('id_usuario', sql.Int, request.authenticatedUserId!)
+        .input('fecha_inicio', sql.Date, fechaInicio)
+        .input('fecha_fin', sql.Date, fechaFin)
+      if (companyId !== null) mayorRequest.input('id_empresa', sql.Int, companyId)
+      if (accountId !== null) mayorRequest.input('id_cuenta', sql.Int, accountId)
+
+      type MayorRow = {
+        tipoCuenta: 'PREDETERMINADA' | 'PERSONALIZADA'
+        idCuenta: number
+        codigo: string
+        nombre: string
+        naturaleza: 'DEUDORA' | 'ACREEDORA'
+        saldoInicial: number | string
+        totalDebe: number | string
+        totalHaber: number | string
+        saldoFinal: number | string
+      }
+
+      const result = await mayorRequest.query<MayorRow>(
+        `WITH Base AS (
+           SELECT
+             M.id_cuenta_predeterminada,
+             M.id_cuenta_personalizada,
+             M.debe,
+             M.haber,
+             P.fecha,
+             E.id_empresa
+           FROM MOVIMIENTO M
+           INNER JOIN PARTIDA P ON P.id_partida = M.id_partida
+           INNER JOIN LIBRO L ON L.id_libro = P.id_libro
+           INNER JOIN EMPRESA E ON E.id_empresa = L.id_empresa
+           WHERE E.id_usuario = @id_usuario
+             AND P.estado = 'CONTABILIZADA'
+             AND P.fecha <= @fecha_fin
+             ${companyFilter}
+             ${accountFilter}
+         ),
+         Movimientos AS (
+           SELECT
+             'PREDETERMINADA' AS tipoCuenta,
+             B.id_cuenta_predeterminada AS idCuenta,
+             CP.codigo,
+             CP.nombre,
+             CP.naturaleza,
+             B.fecha,
+             B.debe,
+             B.haber
+           FROM Base B
+           INNER JOIN CUENTA_PREDETERMINADA CP ON CP.id_cuenta = B.id_cuenta_predeterminada
+           WHERE B.id_cuenta_predeterminada IS NOT NULL
+           UNION ALL
+           SELECT
+             'PERSONALIZADA' AS tipoCuenta,
+             B.id_cuenta_personalizada AS idCuenta,
+             CC.codigo,
+             CC.nombre,
+             CC.naturaleza,
+             B.fecha,
+             B.debe,
+             B.haber
+           FROM Base B
+           INNER JOIN CUENTA_PERSONALIZADA CC
+             ON CC.id_cuenta = B.id_cuenta_personalizada
+            AND CC.id_empresa = B.id_empresa
+           WHERE B.id_cuenta_personalizada IS NOT NULL
+         )
+         SELECT
+           tipoCuenta,
+           idCuenta,
+           codigo,
+           nombre,
+           naturaleza,
+           CAST(SUM(CASE WHEN fecha < @fecha_inicio
+             THEN CASE WHEN naturaleza = 'DEUDORA' THEN debe - haber ELSE haber - debe END
+             ELSE 0 END) AS DECIMAL(12,2)) AS saldoInicial,
+           CAST(SUM(CASE WHEN fecha >= @fecha_inicio THEN debe ELSE 0 END) AS DECIMAL(12,2)) AS totalDebe,
+           CAST(SUM(CASE WHEN fecha >= @fecha_inicio THEN haber ELSE 0 END) AS DECIMAL(12,2)) AS totalHaber,
+           CAST(SUM(CASE WHEN naturaleza = 'DEUDORA' THEN debe - haber ELSE haber - debe END) AS DECIMAL(12,2)) AS saldoFinal
+         FROM Movimientos
+         GROUP BY tipoCuenta, idCuenta, codigo, nombre, naturaleza
+         HAVING SUM(CASE WHEN fecha >= @fecha_inicio THEN debe + haber ELSE 0 END) > 0
+             OR SUM(CASE WHEN fecha < @fecha_inicio
+               THEN CASE WHEN naturaleza = 'DEUDORA' THEN debe - haber ELSE haber - debe END
+               ELSE 0 END) <> 0
+         ORDER BY codigo, tipoCuenta, idCuenta`,
+      )
+
+      response.json({
+        fechaInicio: fechaInicio.toISOString().slice(0, 10),
+        fechaFin: fechaFin.toISOString().slice(0, 10),
+        cuentas: result.recordset.map((row) => ({
+          tipoCuenta: row.tipoCuenta,
+          idCuenta: Number(row.idCuenta),
+          codigo: row.codigo,
+          nombre: row.nombre,
+          naturaleza: row.naturaleza,
+          saldoInicial: Number(row.saldoInicial),
+          totalDebe: Number(row.totalDebe),
+          totalHaber: Number(row.totalHaber),
+          saldoFinal: Number(row.saldoFinal),
+        })),
+      })
+    } catch (error) {
+      console.error('Error al consultar libro mayor:', error)
+      response.status(500).json({ message: 'No fue posible consultar el libro mayor.' })
+    }
+  },
+)
+
 /* ============================================================
    START
    ============================================================ */

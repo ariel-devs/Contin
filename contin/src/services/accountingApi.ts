@@ -1,5 +1,7 @@
 import type { LoginSession } from '../types/accounting'
 
+type AuthSource = LoginSession | string
+
 export type ApiRequestOptions = RequestInit & {
   timeoutMs?: number
 }
@@ -23,13 +25,13 @@ export class HttpError extends Error {
 }
 
 export async function apiRequest<T>(
-  session: LoginSession,
+  source: AuthSource,
   path: string,
   options: ApiRequestOptions = {},
 ): Promise<T> {
   const { timeoutMs = 30_000, ...fetchOptions } = options
   const headers = new Headers(fetchOptions.headers)
-  headers.set('Authorization', `Bearer ${session.token}`)
+  headers.set('Authorization', `Bearer ${typeof source === 'string' ? source : source.token}`)
 
   const hasBody = fetchOptions.body !== undefined && fetchOptions.body !== null
   const isFormData = hasBody && fetchOptions.body instanceof FormData
@@ -80,4 +82,42 @@ export async function apiRequest<T>(
   }
 
   return response.json() as Promise<T>
+}
+
+export type LibroMayorParams = {
+  fecha_inicio: string
+  fecha_fin: string
+  id_cuenta?: number
+  id_empresa?: number
+}
+
+export type LibroMayorCuenta = {
+  tipoCuenta: 'PREDETERMINADA' | 'PERSONALIZADA'
+  idCuenta: number
+  codigo: string
+  nombre: string
+  naturaleza: 'DEUDORA' | 'ACREEDORA'
+  saldoInicial: number
+  totalDebe: number
+  totalHaber: number
+  saldoFinal: number
+}
+
+export type LibroMayorData = {
+  fechaInicio: string
+  fechaFin: string
+  cuentas: LibroMayorCuenta[]
+}
+
+export async function getLibroMayor(
+  token: string,
+  params: LibroMayorParams,
+): Promise<LibroMayorData> {
+  const search = new URLSearchParams({
+    fecha_inicio: params.fecha_inicio,
+    fecha_fin: params.fecha_fin,
+  })
+  if (params.id_cuenta !== undefined) search.set('id_cuenta', String(params.id_cuenta))
+  if (params.id_empresa !== undefined) search.set('id_empresa', String(params.id_empresa))
+  return apiRequest<LibroMayorData>(token, `/api/reportes/mayor?${search.toString()}`)
 }

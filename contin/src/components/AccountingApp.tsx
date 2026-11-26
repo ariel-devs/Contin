@@ -24,6 +24,7 @@ import PeriodsModule from './PeriodsModule'
 import TercerosModule from './TercerosModule'
 import DteModule from './DteModule'
 import LibroIvaModule from './LibroIvaModule'
+import MayorModule from './MayorModule'
 import DeclaracionIvaModule from './DeclaracionIvaModule'
 import './AccountingApp.css'
 
@@ -265,9 +266,12 @@ function AccountingApp({
         </div>
         <nav className="sidebar-nav" aria-label="Navegación principal">
           {menuItems.map((item) => {
-            const target = currentCompany
-              ? `/companies/${currentCompany.id}/${item.slug}`
-              : '/companies'
+            const target =
+              item.slug === 'mayor'
+                ? '/app/mayor'
+                : currentCompany
+                  ? `/companies/${currentCompany.id}/${item.slug}`
+                  : '/companies'
             return (
               <NavLink
                 key={item.slug}
@@ -433,6 +437,18 @@ function AccountingApp({
               }
             />
             <Route
+              path="/app/mayor"
+              element={
+                isLoadingCompanies ? (
+                  <LoadingMessage text="Cargando empresa..." />
+                ) : companies.length === 0 ? (
+                  <Navigate to="/companies/new" replace />
+                ) : (
+                  <MayorModule session={session} company={companies[0]} />
+                )
+              }
+            />
+            <Route
               path="/companies/:companyId/:section"
               element={
                 currentCompany ? (
@@ -460,6 +476,12 @@ function AccountingApp({
                     ) : (
                       <SelectPeriod />
                     )
+                  ) : activeSection === 'mayor' ? (
+                    <MayorModule
+                      session={session}
+                      company={currentCompany}
+                      book={currentBook}
+                    />
                   ) : activeSection === 'periodos' ? (
                     isCurrentBooksLoading ? (
                       <LoadingMessage text="Cargando períodos contables..." />

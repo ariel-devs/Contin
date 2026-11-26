@@ -581,7 +581,7 @@ function JournalPresentation({
       ? pages
       : [{ entries: entries.map((entry) => ({ ...entry, folio: `${entry.numero}/1` })), final: totals }]
   const depthByKey = useMemo(
-    () => new Map(accounts.map((account) => [account.key, account.profundidad])),
+    () => new Map(accounts.map((account) => [account.key, account.profundidad ?? 0])),
     [accounts],
   )
 
@@ -1074,7 +1074,7 @@ function NewEntryForm({
                             !account.permiteMovimientos
                           }
                         >
-                          {`${'　'.repeat(Math.min(account.profundidad, 8))}${account.codigo} · ${account.nombre}${account.permiteMovimientos ? '' : ' (agrupadora)'}`}
+                          {`${'　'.repeat(Math.min(account.profundidad ?? 0, 8))}${account.codigo} · ${account.nombre}${account.permiteMovimientos ? '' : ' (agrupadora)'}`}
                         </option>
                       ))}
                     </select>
