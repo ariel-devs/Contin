@@ -71,6 +71,16 @@ function App() {
             }
           />
           <Route
+            path="/app/*"
+            element={
+              session ? (
+                <AccountingApp session={session} onSignOut={signOut} />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+          <Route
             path="/*"
             element={
               session ? (

@@ -25,7 +25,10 @@ import TercerosModule from './TercerosModule'
 import DteModule from './DteModule'
 import LibroIvaModule from './LibroIvaModule'
 import DeclaracionIvaModule from './DeclaracionIvaModule'
+import MayorModule from './MayorModule'
 import './AccountingApp.css'
+
+const selectedCompanyStorageKey = 'contin.selectedCompany'
 
 const menuItems: { label: string; slug: string; icon: IconName }[] = [
   { label: 'Dashboard', slug: 'dashboard', icon: 'dashboard' },
@@ -79,7 +82,13 @@ function AccountingApp({
   const navigate = useNavigate()
   const location = useLocation()
 
-  const companyIdFromPath = location.pathname.match(/^\/companies\/(\d+)/)?.[1]
+  const storedCompanyId = sessionStorage.getItem(selectedCompanyStorageKey) ?? ''
+  const companyIdFromPath =
+    location.pathname.match(/^\/companies\/(\d+)/)?.[1] ??
+    (location.pathname.startsWith('/app/')
+      ? storedCompanyId ||
+        (companies.length === 1 ? String(companies[0].id) : undefined)
+      : undefined)
   const currentCompany = companies.find((company) => company.id === Number(companyIdFromPath))
   const activeSection = location.pathname.split('/').filter(Boolean).at(-1)
   const books = currentCompany && booksForCompanyId === currentCompany.id ? loadedBooks : []
@@ -126,13 +135,16 @@ function AccountingApp({
   useEffect(() => {
     if (isLoadingCompanies || location.pathname !== '/') return
     if (companies.length === 0) navigate('/companies/new', { replace: true })
-    else if (companies.length === 1)
+    else if (companies.length === 1) {
+      sessionStorage.setItem(selectedCompanyStorageKey, String(companies[0].id))
       navigate(`/companies/${companies[0].id}/dashboard`, { replace: true })
+    }
     else navigate('/companies', { replace: true })
   }, [companies, isLoadingCompanies, location.pathname, navigate])
 
   useEffect(() => {
     if (!currentCompany) return
+    sessionStorage.setItem(selectedCompanyStorageKey, String(currentCompany.id))
     let active = true
     const savedBookId = sessionStorage.getItem(selectedBookStorageKey(currentCompany.id))
     apiRequest<Book[]>(session, `/api/companies/${currentCompany.id}/books`)
@@ -209,6 +221,7 @@ function AccountingApp({
       navigate('/companies')
       return
     }
+    sessionStorage.setItem(selectedCompanyStorageKey, value)
     navigate(`/companies/${value}/dashboard`)
   }
 
@@ -274,7 +287,7 @@ function AccountingApp({
                 to={target}
                 title={sidebarCollapsed ? item.label : undefined}
                 className={({ isActive }) =>
-                  `sidebar-link${isActive ? ' sidebar-link--active' : ''}`
+                  `sidebar-link${isActive || item.slug === activeSection ? ' sidebar-link--active' : ''}`
                 }
                 onClick={() => setMobileMenuOpen(false)}
               >
@@ -414,7 +427,10 @@ function AccountingApp({
                 <CompanyPicker
                   companies={companies}
                   loading={isLoadingCompanies}
-                  onSelect={(company) => navigate(`/companies/${company.id}/dashboard`)}
+                  onSelect={(company) => {
+                    sessionStorage.setItem(selectedCompanyStorageKey, String(company.id))
+                    navigate(`/companies/${company.id}/dashboard`)
+                  }}
                   onCreate={() => navigate('/companies/new')}
                 />
               }
@@ -425,6 +441,7 @@ function AccountingApp({
                 <NewCompany
                   session={session}
                   onCreated={(company) => {
+                    sessionStorage.setItem(selectedCompanyStorageKey, String(company.id))
                     setCompanies((existing) => [...existing, company])
                     navigate(`/companies/${company.id}/dashboard`)
                   }}
@@ -460,6 +477,8 @@ function AccountingApp({
                     ) : (
                       <SelectPeriod />
                     )
+                  ) : activeSection === 'mayor' ? (
+                    <MayorModule session={session} company={currentCompany} />
                   ) : activeSection === 'periodos' ? (
                     isCurrentBooksLoading ? (
                       <LoadingMessage text="Cargando períodos contables..." />
@@ -501,6 +520,18 @@ function AccountingApp({
                   ) : (
                     <ComingSoon title={pageTitle} />
                   )
+                ) : isLoadingCompanies ? (
+                  <LoadingMessage text="Cargando empresa..." />
+                ) : (
+                  <Navigate to="/companies" replace />
+                )
+              }
+            />
+            <Route
+              path="/app/mayor"
+              element={
+                currentCompany ? (
+                  <MayorModule session={session} company={currentCompany} />
                 ) : isLoadingCompanies ? (
                   <LoadingMessage text="Cargando empresa..." />
                 ) : (

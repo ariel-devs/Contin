@@ -96,6 +96,12 @@ function parsePositiveId(value: string | string[]): number | null {
   return Number.isSafeInteger(id) && id > 0 ? id : null
 }
 
+function queryString(value: unknown): string | undefined {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value) && typeof value[0] === 'string') return value[0]
+  return undefined
+}
+
 type AccountClassification =
   | 'ACTIVO'
   | 'PASIVO'
@@ -2687,6 +2693,155 @@ app.get(
     }
   },
 )
+
+app.get('/api/reportes/mayor', authenticate, async (request, response) => {
+  const companyId = parsePositiveId(
+    queryString(request.query.id_empresa) ?? queryString(request.query.companyId) ?? '',
+  )
+  const startDateValue = queryString(request.query.fecha_inicio)
+  const endDateValue = queryString(request.query.fecha_fin)
+  const startDate = startDateValue === undefined ? null : parseIsoDate(startDateValue)
+  const endDate = endDateValue === undefined ? null : parseIsoDate(endDateValue)
+  const accountFilter =
+    queryString(request.query.id_cuenta) ?? queryString(request.query.cuenta) ?? ''
+  const accountKeyMatch = /^([PC]):([1-9]\d*)$/.exec(accountFilter)
+  const accountId = accountKeyMatch
+    ? parsePositiveId(accountKeyMatch[2])
+    : accountFilter === ''
+      ? null
+      : parsePositiveId(accountFilter)
+  const accountType = accountKeyMatch ? (accountKeyMatch[1] as 'P' | 'C') : null
+
+  if (
+    companyId === null ||
+    startDate === null ||
+    endDate === null ||
+    startDate > endDate ||
+    (accountFilter !== '' && accountId === null)
+  ) {
+    response.status(400).json({
+      message: 'Revisa la empresa, el rango de fechas y la cuenta seleccionada.',
+    })
+    return
+  }
+
+  try {
+    const connection = await database.connect()
+    if (!await userOwnsCompany(connection, request.authenticatedUserId!, companyId)) {
+      response.status(404).json({ message: 'No se encontró la empresa seleccionada.' })
+      return
+    }
+
+    const result = await connection
+      .request()
+      .input('id_usuario', sql.Int, request.authenticatedUserId!)
+      .input('id_empresa', sql.Int, companyId)
+      .input('fecha_inicio', sql.Date, startDate)
+      .input('fecha_fin', sql.Date, endDate)
+      .input('id_cuenta', sql.Int, accountId)
+      .input('tipo_cuenta', sql.Char(1), accountType)
+      .query<{
+        tipo_cuenta: 'P' | 'C'
+        id_cuenta: number
+        codigo: string
+        nombre: string
+        naturaleza: 'DEUDORA' | 'ACREEDORA'
+        saldoInicial: number | string
+        totalDebe: number | string
+        totalHaber: number | string
+        saldoFinal: number | string
+      }>(
+        `WITH Movimientos AS (
+           SELECT
+             CASE WHEN M.id_cuenta_predeterminada IS NOT NULL
+                  THEN CAST('P' AS CHAR(1)) ELSE CAST('C' AS CHAR(1)) END AS tipo_cuenta,
+             COALESCE(M.id_cuenta_predeterminada, M.id_cuenta_personalizada) AS id_cuenta,
+             COALESCE(CP.codigo, CC.codigo) AS codigo,
+             COALESCE(CP.nombre, CC.nombre) AS nombre,
+             COALESCE(CP.naturaleza, CC.naturaleza) AS naturaleza,
+             P.fecha,
+             M.debe,
+             M.haber
+           FROM MOVIMIENTO M
+           INNER JOIN PARTIDA P ON P.id_partida = M.id_partida
+           INNER JOIN LIBRO L ON L.id_libro = P.id_libro
+           INNER JOIN EMPRESA E ON E.id_empresa = L.id_empresa
+           LEFT JOIN CUENTA_PREDETERMINADA CP ON CP.id_cuenta = M.id_cuenta_predeterminada
+           LEFT JOIN CUENTA_PERSONALIZADA CC
+             ON CC.id_cuenta = M.id_cuenta_personalizada
+            AND CC.id_empresa = E.id_empresa
+           WHERE E.id_usuario = @id_usuario
+             AND E.id_empresa = @id_empresa
+             AND P.estado = 'CONTABILIZADA'
+             AND (CP.id_cuenta IS NOT NULL OR CC.id_cuenta IS NOT NULL)
+             AND (@id_cuenta IS NULL
+                  OR M.id_cuenta_predeterminada = @id_cuenta
+                  OR M.id_cuenta_personalizada = @id_cuenta)
+             AND (@tipo_cuenta IS NULL
+                  OR (@tipo_cuenta = 'P' AND M.id_cuenta_predeterminada = @id_cuenta)
+                  OR (@tipo_cuenta = 'C' AND M.id_cuenta_personalizada = @id_cuenta))
+         )
+         SELECT
+           tipo_cuenta,
+           id_cuenta,
+           codigo,
+           nombre,
+           naturaleza,
+           COALESCE(SUM(CASE
+             WHEN fecha < @fecha_inicio THEN
+               CASE WHEN naturaleza = 'DEUDORA' THEN debe - haber ELSE haber - debe END
+             ELSE 0
+           END), 0) AS saldoInicial,
+           COALESCE(SUM(CASE
+             WHEN fecha BETWEEN @fecha_inicio AND @fecha_fin THEN debe ELSE 0
+           END), 0) AS totalDebe,
+           COALESCE(SUM(CASE
+             WHEN fecha BETWEEN @fecha_inicio AND @fecha_fin THEN haber ELSE 0
+           END), 0) AS totalHaber,
+           COALESCE(SUM(CASE
+             WHEN fecha <= @fecha_fin THEN
+               CASE WHEN naturaleza = 'DEUDORA' THEN debe - haber ELSE haber - debe END
+             ELSE 0
+           END), 0) AS saldoFinal
+         FROM Movimientos
+         WHERE fecha <= @fecha_fin
+         GROUP BY tipo_cuenta, id_cuenta, codigo, nombre, naturaleza
+         ORDER BY codigo, tipo_cuenta`,
+      )
+
+    const cuentas = result.recordset.map((row) => ({
+      cuentaKey: `${row.tipo_cuenta}:${row.id_cuenta}`,
+      tipoCuenta: row.tipo_cuenta,
+      idCuenta: row.id_cuenta,
+      codigo: row.codigo,
+      nombre: row.nombre,
+      naturaleza: row.naturaleza,
+      saldoInicial: Number(row.saldoInicial),
+      totalDebe: Number(row.totalDebe),
+      totalHaber: Number(row.totalHaber),
+      saldoFinal: Number(row.saldoFinal),
+    }))
+
+    response.json({
+      empresa: { id: companyId },
+      fechaInicio: startDate.toISOString().slice(0, 10),
+      fechaFin: endDate.toISOString().slice(0, 10),
+      cuentas,
+      totales: cuentas.reduce(
+        (totals, cuenta) => ({
+          saldoInicial: totals.saldoInicial + cuenta.saldoInicial,
+          totalDebe: totals.totalDebe + cuenta.totalDebe,
+          totalHaber: totals.totalHaber + cuenta.totalHaber,
+          saldoFinal: totals.saldoFinal + cuenta.saldoFinal,
+        }),
+        { saldoInicial: 0, totalDebe: 0, totalHaber: 0, saldoFinal: 0 },
+      ),
+    })
+  } catch (error) {
+    console.error('Error al generar el libro mayor:', error)
+    response.status(500).json({ message: 'No fue posible generar el libro mayor.' })
+  }
+})
 
 /* ============================================================
    START
