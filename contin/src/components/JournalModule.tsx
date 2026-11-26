@@ -7,10 +7,17 @@ import {
   type FormEvent,
 } from 'react'
 import { apiRequest } from '../services/accountingApi'
-import type { Book, Company, LoginSession } from '../types/accounting'
+import type {
+  Account,
+  Book,
+  Company,
+  Dte,
+  LoginSession,
+  Tercero,
+} from '../types/accounting'
+import { formatDate, formatMoney, formatShortDate } from '../utils/format'
 import { Icon } from './Icon'
 import './JournalModule.css'
-import type { Account } from '../types/accounting'
 
 type JournalLine = {
   id: number
@@ -30,6 +37,7 @@ type JournalEntry = {
   numero: number
   fecha: string
   concepto: string
+  estado: 'CONTABILIZADA' | 'ANULADA'
   lines: JournalLine[]
 }
 
@@ -54,6 +62,7 @@ type JournalFilters = {
   desde: string
   hasta: string
   numero: string
+  estado: 'TODAS' | 'CONTABILIZADA' | 'ANULADA'
 }
 
 type EntryPage = {
@@ -81,35 +90,29 @@ type SubmissionResult = {
   estado: string
 }
 
-const emptyFilters: JournalFilters = { desde: '', hasta: '', numero: '' }
+type TipoOperacion = 'COMPRA' | 'VENTA'
+
+const emptyFilters: JournalFilters = {
+  desde: '',
+  hasta: '',
+  numero: '',
+  estado: 'TODAS',
+}
 
 function isoDate(value: string) {
   return value.slice(0, 10)
 }
 
 function displayDate(value: string) {
-  const date = new Date(`${isoDate(value)}T00:00:00`)
-  return new Intl.DateTimeFormat('es', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  }).format(date)
+  return formatDate(value)
 }
 
 function displayShortDate(value: string) {
-  const date = new Date(`${isoDate(value)}T00:00:00`)
-  return new Intl.DateTimeFormat('es', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-  }).format(date)
+  return formatShortDate(value)
 }
 
 function displayMoney(value: number) {
-  return new Intl.NumberFormat('es', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value)
+  return formatMoney(value)
 }
 
 function cents(value: string): number | null {
@@ -192,8 +195,7 @@ function buildPages(
       const isLast = index === entries.length - 1
       const footerHeight = isLast ? finalHeight : pasanHeight
       const entryHeight = heights[index] ?? 0
-      const wouldOverflow =
-        used + entryHeight + footerHeight > capacity
+      const wouldOverflow = used + entryHeight + footerHeight > capacity
 
       if (wouldOverflow && pageEntries.length > 0) break
 
@@ -256,14 +258,15 @@ function JournalModule({
   } | null>(null)
   const [loadError, setLoadError] = useState<{ key: string; message: string } | null>(null)
   const [successMessage, setSuccessMessage] = useState('')
+  const [actionError, setActionError] = useState('')
   const [isFormOpen, setIsFormOpen] = useState(false)
+  const [anularEntry, setAnularEntry] = useState<JournalEntry | null>(null)
 
-  const filterKey = `${appliedFilters.desde}|${appliedFilters.hasta}|${appliedFilters.numero}`
+  const filterKey = `${appliedFilters.desde}|${appliedFilters.hasta}|${appliedFilters.numero}|${appliedFilters.estado}`
   const requestKey = `${company.id}:${book.id}:${filterKey}`
   const accountKey = `${company.id}:${book.id}`
   const journal = loadedJournal?.key === requestKey ? loadedJournal.data : null
-  const accounts =
-    loadedAccounts?.key === accountKey ? loadedAccounts.accounts : []
+  const accounts = loadedAccounts?.key === accountKey ? loadedAccounts.accounts : []
   const error = loadError?.key === requestKey ? loadError.message : ''
   const isLoading = !journal && !error
   const canPost = book.estado === 'ABIERTO'
@@ -274,6 +277,7 @@ function JournalModule({
     if (appliedFilters.desde) search.set('desde', appliedFilters.desde)
     if (appliedFilters.hasta) search.set('hasta', appliedFilters.hasta)
     if (appliedFilters.numero) search.set('numero', appliedFilters.numero)
+    if (appliedFilters.estado !== 'TODAS') search.set('estado', appliedFilters.estado)
     const query = search.size ? `?${search.toString()}` : ''
 
     Promise.all([
@@ -313,6 +317,7 @@ function JournalModule({
     appliedFilters.desde,
     appliedFilters.hasta,
     appliedFilters.numero,
+    appliedFilters.estado,
     book.id,
     company.id,
     refreshVersion,
@@ -322,11 +327,7 @@ function JournalModule({
 
   function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (
-      filters.desde &&
-      filters.hasta &&
-      filters.desde > filters.hasta
-    ) {
+    if (filters.desde && filters.hasta && filters.desde > filters.hasta) {
       setLoadError({
         key: requestKey,
         message: 'La fecha inicial no puede ser posterior a la fecha final.',
@@ -347,6 +348,74 @@ function JournalModule({
     setIsFormOpen(false)
     setSuccessMessage(`La partida N.º ${result.numero} fue contabilizada correctamente.`)
     setRefreshVersion((value) => value + 1)
+  }
+
+  function onEntryAnulada(entry: JournalEntry) {
+    setAnularEntry(null)
+    setSuccessMessage(`La partida N.º ${entry.numero} fue anulada.`)
+    setActionError('')
+    setRefreshVersion((value) => value + 1)
+  }
+
+  function exportCsv() {
+    if (!journal) return
+    const rows: string[][] = []
+    rows.push([
+      'Fecha',
+      'N.º Partida',
+      'Concepto',
+      'Estado',
+      'Cuenta',
+      'Código',
+      'Parcial',
+      'Debe',
+      'Haber',
+    ])
+    for (const entry of journal.entries) {
+      for (const line of entry.lines) {
+        rows.push([
+          entry.fecha.slice(0, 10),
+          String(entry.numero),
+          entry.concepto,
+          entry.estado,
+          line.cuenta,
+          line.codigo,
+          line.parcial !== null ? line.parcial.toFixed(2) : '',
+          line.debe > 0 ? line.debe.toFixed(2) : '',
+          line.haber > 0 ? line.haber.toFixed(2) : '',
+        ])
+      }
+    }
+    rows.push([
+      '',
+      '',
+      '',
+      'TOTALES',
+      '',
+      '',
+      '',
+      journal.totals.debe.toFixed(2),
+      journal.totals.haber.toFixed(2),
+    ])
+    const csv = rows
+      .map((row) =>
+        row
+          .map((cell) => {
+            const text = String(cell ?? '')
+            return /[",\n;]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+          })
+          .join(','),
+      )
+      .join('\r\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `libro-diario-${book.nombre.replace(/\s+/g, '_')}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   return (
@@ -381,21 +450,21 @@ function JournalModule({
         <div className="journal-alert journal-alert--success" role="status">
           <Icon name="check" size={18} />
           <span>{successMessage}</span>
-          <button
-            aria-label="Cerrar confirmación"
-            onClick={() => setSuccessMessage('')}
-          >
+          <button aria-label="Cerrar confirmación" onClick={() => setSuccessMessage('')}>
             <Icon name="close" size={16} />
           </button>
         </div>
       )}
-      {error && (
+      {(error || actionError) && (
         <div className="journal-alert journal-alert--error" role="alert">
           <Icon name="warning" size={18} />
-          <span>{error}</span>
+          <span>{error || actionError}</span>
           <button
             aria-label="Cerrar mensaje"
-            onClick={() => setLoadError(null)}
+            onClick={() => {
+              setLoadError(null)
+              setActionError('')
+            }}
           >
             <Icon name="close" size={16} />
           </button>
@@ -459,6 +528,32 @@ function JournalModule({
             }
           />
         </label>
+        <label>
+          <span>Estado</span>
+          <select
+            value={filters.estado}
+            onChange={(event) =>
+              setFilters((current) => ({
+                ...current,
+                estado: event.target.value as JournalFilters['estado'],
+              }))
+            }
+            style={{
+              height: '38px',
+              padding: '0 10px',
+              border: '1px solid #e0e5eb',
+              borderRadius: '6px',
+              outline: 0,
+              color: '#3e4f63',
+              background: '#fff',
+              fontSize: '10px',
+            }}
+          >
+            <option value="TODAS">Todas</option>
+            <option value="CONTABILIZADA">Contabilizadas</option>
+            <option value="ANULADA">Anuladas</option>
+          </select>
+        </label>
         <div className="journal-filter-actions">
           <button className="secondary-button" type="button" onClick={clearFilters}>
             Limpiar
@@ -475,19 +570,26 @@ function JournalModule({
           <div>
             <h2>Presentación del libro</h2>
             <p>
-              {journal.entries.length} {journal.entries.length === 1 ? 'partida' : 'partidas'}
-              {appliedFilters.desde || appliedFilters.hasta || appliedFilters.numero
+              {journal.entries.length}{' '}
+              {journal.entries.length === 1 ? 'partida' : 'partidas'}
+              {appliedFilters.desde || appliedFilters.hasta || appliedFilters.numero || appliedFilters.estado !== 'TODAS'
                 ? ' · resultados filtrados'
                 : ' · ordenadas por fecha y número'}
             </p>
           </div>
-          <button
-            className="secondary-button journal-print-button"
-            onClick={() => window.print()}
-          >
-            <Icon name="print" size={17} />
-            Imprimir libro
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="secondary-button journal-print-button" onClick={exportCsv}>
+              <Icon name="print" size={17} />
+              Exportar CSV
+            </button>
+            <button
+              className="secondary-button journal-print-button"
+              onClick={() => window.print()}
+            >
+              <Icon name="print" size={17} />
+              Imprimir libro
+            </button>
+          </div>
         </div>
       )}
 
@@ -505,6 +607,7 @@ function JournalModule({
             entries={journal.entries}
             totals={journal.totals}
             accounts={accounts}
+            onAnular={(entry) => setAnularEntry(entry)}
           />
           <p className="journal-pagination-note">
             La distribución de páginas y los folios se calculan con la altura real de las partidas.
@@ -512,18 +615,20 @@ function JournalModule({
         </>
       ) : (
         <div className="journal-empty">
-          <span className="journal-empty-icon"><Icon name="journal" size={25} /></span>
+          <span className="journal-empty-icon">
+            <Icon name="journal" size={25} />
+          </span>
           <h2>
-            {appliedFilters.desde || appliedFilters.hasta || appliedFilters.numero
+            {appliedFilters.desde || appliedFilters.hasta || appliedFilters.numero || appliedFilters.estado !== 'TODAS'
               ? 'No hay partidas para estos filtros'
               : 'Aún no hay partidas contabilizadas'}
           </h2>
           <p>
-            {appliedFilters.desde || appliedFilters.hasta || appliedFilters.numero
+            {appliedFilters.desde || appliedFilters.hasta || appliedFilters.numero || appliedFilters.estado !== 'TODAS'
               ? 'Prueba con otros criterios o limpia los filtros.'
               : 'Cuando registres una partida y se contabilice correctamente, aparecerá aquí.'}
           </p>
-          {appliedFilters.desde || appliedFilters.hasta || appliedFilters.numero ? (
+          {appliedFilters.desde || appliedFilters.hasta || appliedFilters.numero || appliedFilters.estado !== 'TODAS' ? (
             <button className="secondary-button" onClick={clearFilters}>
               Limpiar filtros
             </button>
@@ -555,6 +660,17 @@ function JournalModule({
           onSuccess={onEntryCreated}
         />
       )}
+
+      {anularEntry && (
+        <AnularPartidaModal
+          session={session}
+          company={company}
+          book={book}
+          entry={anularEntry}
+          onCancel={() => setAnularEntry(null)}
+          onSuccess={() => onEntryAnulada(anularEntry)}
+        />
+      )}
     </section>
   )
 }
@@ -565,12 +681,14 @@ function JournalPresentation({
   entries,
   totals,
   accounts,
+  onAnular,
 }: {
   company: Company
   book: Book
   entries: JournalEntry[]
   totals: JournalData['totals']
   accounts: Account[]
+  onAnular: (entry: JournalEntry) => void
 }) {
   const [pages, setPages] = useState<EntryPage[]>([])
   const [measuredKey, setMeasuredKey] = useState('')
@@ -579,9 +697,14 @@ function JournalPresentation({
   const displayPages =
     measuredKey === layoutKey
       ? pages
-      : [{ entries: entries.map((entry) => ({ ...entry, folio: `${entry.numero}/1` })), final: totals }]
+      : [
+          {
+            entries: entries.map((entry) => ({ ...entry, folio: `${entry.numero}/1` })),
+            final: totals,
+          },
+        ]
   const depthByKey = useMemo(
-    () => new Map(accounts.map((account) => [account.key, account.profundidad])),
+    () => new Map(accounts.map((account) => [account.key, account.profundidad ?? 0])),
     [accounts],
   )
 
@@ -597,25 +720,19 @@ function JournalPresentation({
       const entryElements = [...root.querySelectorAll<HTMLElement>('[data-measure-entry]')]
       const heights = entryElements.map((element) => element.getBoundingClientRect().height)
       const startHeight =
-        root.querySelector<HTMLElement>('[data-measure-row="vienen"]')?.getBoundingClientRect().height ?? 0
+        root.querySelector<HTMLElement>('[data-measure-row="vienen"]')?.getBoundingClientRect()
+          .height ?? 0
       const passHeight =
-        root.querySelector<HTMLElement>('[data-measure-row="pasan"]')?.getBoundingClientRect().height ?? 0
+        root.querySelector<HTMLElement>('[data-measure-row="pasan"]')?.getBoundingClientRect()
+          .height ?? 0
       const finalHeight =
-        root.querySelector<HTMLElement>('[data-measure-row="final"]')?.getBoundingClientRect().height ??
-        passHeight
-      const available =
-        tableArea.clientHeight - tableHead.getBoundingClientRect().height
+        root.querySelector<HTMLElement>('[data-measure-row="final"]')?.getBoundingClientRect()
+          .height ?? passHeight
+      const available = tableArea.clientHeight - tableHead.getBoundingClientRect().height
       if (available <= 0) return
 
       setPages(
-        buildPages(
-          entries,
-          heights,
-          available,
-          startHeight,
-          passHeight,
-          finalHeight,
-        ),
+        buildPages(entries, heights, available, startHeight, passHeight, finalHeight),
       )
       setMeasuredKey(layoutKey)
     }
@@ -641,6 +758,7 @@ function JournalPresentation({
             page={page}
             pageNumber={index + 1}
             depthByKey={depthByKey}
+            onAnular={onAnular}
           />
         ))}
       </div>
@@ -656,6 +774,7 @@ function JournalPresentation({
           }}
           pageNumber={1}
           depthByKey={depthByKey}
+          onAnular={() => undefined}
           measure
         />
       </div>
@@ -669,6 +788,7 @@ function JournalSheet({
   page,
   pageNumber,
   depthByKey,
+  onAnular,
   measure = false,
 }: {
   company: Company
@@ -676,6 +796,7 @@ function JournalSheet({
   page: EntryPage
   pageNumber: number
   depthByKey: Map<string, number>
+  onAnular: (entry: JournalEntry) => void
   measure?: boolean
 }) {
   return (
@@ -689,7 +810,9 @@ function JournalSheet({
         </span>
       </header>
       <div className="journal-table-area">
-        <table className={`journal-page-table${measure ? ' journal-page-table--measure' : ''}`}>
+        <table
+          className={`journal-page-table${measure ? ' journal-page-table--measure' : ''}`}
+        >
           <colgroup>
             <col className="journal-col-date" />
             <col className="journal-col-detail" />
@@ -726,7 +849,44 @@ function JournalSheet({
             >
               <tr className="journal-entry-title">
                 <td />
-                <td colSpan={5}>PARTIDA N.º {entry.numero}</td>
+                <td colSpan={5}>
+                  PARTIDA N.º {entry.numero}
+                  {entry.estado === 'ANULADA' && (
+                    <span
+                      style={{
+                        marginLeft: '8px',
+                        padding: '2px 7px',
+                        borderRadius: '10px',
+                        color: '#9b4545',
+                        background: '#fbeded',
+                        fontSize: '8px',
+                        fontWeight: 600,
+                      }}
+                    >
+                      ANULADA
+                    </span>
+                  )}
+                  {!measure && entry.estado === 'CONTABILIZADA' && (
+                    <button
+                      type="button"
+                      onClick={() => onAnular(entry)}
+                      style={{
+                        marginLeft: 'auto',
+                        padding: '2px 7px',
+                        border: '1px solid #f0d7d7',
+                        borderRadius: '5px',
+                        color: '#9b4545',
+                        background: '#fff',
+                        fontSize: '8px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        float: 'right',
+                      }}
+                    >
+                      Anular
+                    </button>
+                  )}
+                </td>
               </tr>
               {entry.lines.map((line, index) => (
                 <tr className="journal-movement-row" key={line.id}>
@@ -743,9 +903,15 @@ function JournalSheet({
                     </span>
                   </td>
                   <td>{index === 0 ? entry.folio : ''}</td>
-                  <td className="journal-amount">{line.parcial === null ? '' : displayMoney(line.parcial)}</td>
-                  <td className="journal-amount">{line.debe > 0 ? displayMoney(line.debe) : ''}</td>
-                  <td className="journal-amount">{line.haber > 0 ? displayMoney(line.haber) : ''}</td>
+                  <td className="journal-amount">
+                    {line.parcial === null ? '' : displayMoney(line.parcial)}
+                  </td>
+                  <td className="journal-amount">
+                    {line.debe > 0 ? displayMoney(line.debe) : ''}
+                  </td>
+                  <td className="journal-amount">
+                    {line.haber > 0 ? displayMoney(line.haber) : ''}
+                  </td>
                 </tr>
               ))}
               <tr className="journal-concept-row">
@@ -767,7 +933,9 @@ function JournalSheet({
         </table>
       </div>
       <footer className="journal-sheet-footer">
-        <span>{company.nombre} · {book.nombre}</span>
+        <span>
+          {company.nombre} · {book.nombre}
+        </span>
         <span>Página {pageNumber}</span>
       </footer>
     </article>
@@ -786,10 +954,7 @@ function JournalTotalRow({
   className: string
 }) {
   return (
-    <tr
-      className={className}
-      data-measure-row={dataMeasure}
-    >
+    <tr className={className} data-measure-row={dataMeasure}>
       <td />
       <th scope="row">{label}</th>
       <td />
@@ -797,6 +962,138 @@ function JournalTotalRow({
       <td className="journal-amount">{displayMoney(totals.debe)}</td>
       <td className="journal-amount">{displayMoney(totals.haber)}</td>
     </tr>
+  )
+}
+
+function AnularPartidaModal({
+  session,
+  company,
+  book,
+  entry,
+  onCancel,
+  onSuccess,
+}: {
+  session: LoginSession
+  company: Company
+  book: Book
+  entry: JournalEntry
+  onCancel: () => void
+  onSuccess: () => void
+}) {
+  const [motivo, setMotivo] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError('')
+    if (!motivo.trim()) {
+      setError('Indica el motivo de anulación.')
+      return
+    }
+    if (motivo.trim().length > 250) {
+      setError('El motivo admite hasta 250 caracteres.')
+      return
+    }
+    setIsSubmitting(true)
+    try {
+      await apiRequest(
+        session,
+        `/api/companies/${company.id}/books/${book.id}/entries/${entry.id}/anular`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ motivo: motivo.trim() }),
+        },
+      )
+      onSuccess()
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'No fue posible anular la partida.',
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <div
+      className="journal-modal-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !isSubmitting) onCancel()
+      }}
+    >
+      <section
+        aria-labelledby="anular-partida-title"
+        aria-modal="true"
+        className="journal-entry-dialog"
+        role="dialog"
+        style={{ maxWidth: '520px' }}
+      >
+        <header className="journal-dialog-heading">
+          <div>
+            <span className="section-eyebrow">ANULAR PARTIDA</span>
+            <h2 id="anular-partida-title">Partida N.º {entry.numero}</h2>
+            <p>La partida no se borrará, solo se marcará como ANULADA.</p>
+          </div>
+          <button
+            className="journal-dialog-close"
+            aria-label="Cerrar formulario"
+            disabled={isSubmitting}
+            onClick={onCancel}
+          >
+            <Icon name="close" size={19} />
+          </button>
+        </header>
+        <form className="journal-entry-form" onSubmit={submit}>
+          <div className="journal-concept-field" style={{ marginTop: 0 }}>
+            <span>Motivo de anulación <b>*</b></span>
+            <textarea
+              autoFocus
+              maxLength={250}
+              rows={4}
+              value={motivo}
+              onChange={(event) => setMotivo(event.target.value)}
+              placeholder="Describe el motivo de la anulación"
+              style={{
+                width: '100%',
+                padding: '10px',
+                border: '1px solid #e0e5eb',
+                borderRadius: '6px',
+                outline: 'none',
+                color: '#35495f',
+                background: '#fff',
+                fontSize: '11px',
+                fontFamily: 'inherit',
+                resize: 'vertical',
+                minHeight: '90px',
+              }}
+            />
+            <small style={{ alignSelf: 'flex-end' }}>{motivo.length}/250 caracteres</small>
+          </div>
+          {error && (
+            <p className="journal-form-error" role="alert">
+              {error}
+            </p>
+          )}
+          <footer className="journal-form-actions">
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={isSubmitting}
+              onClick={onCancel}
+            >
+              Cancelar
+            </button>
+            <button className="primary-button" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Anulando…' : 'Anular partida'}
+            </button>
+          </footer>
+        </form>
+      </section>
+    </div>
   )
 }
 
@@ -821,18 +1118,40 @@ function NewEntryForm({
     { key: 1, cuenta: '', parcial: '', debe: '', haber: '' },
     { key: 2, cuenta: '', parcial: '', debe: '', haber: '' },
   ])
+  const [autoIva, setAutoIva] = useState(false)
+  const [tipoOperacion, setTipoOperacion] = useState<TipoOperacion>('VENTA')
+  const [baseGravada, setBaseGravada] = useState('')
+  const [idTercero, setIdTercero] = useState('')
+  const [idDte, setIdDte] = useState('')
+  const [terceros, setTerceros] = useState<Tercero[]>([])
+  const [dtes, setDtes] = useState<Dte[]>([])
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const nextLineKey = useRef(3)
 
-  const totalDebeCents = lineas.reduce(
-    (total, line) => total + (cents(line.debe) ?? 0),
-    0,
-  )
-  const totalHaberCents = lineas.reduce(
-    (total, line) => total + (cents(line.haber) ?? 0),
-    0,
-  )
+  useEffect(() => {
+    if (!autoIva) return
+    let active = true
+    Promise.all([
+      apiRequest<Tercero[]>(session, `/api/companies/${company.id}/terceros`),
+      apiRequest<Dte[]>(session, `/api/companies/${company.id}/dte`),
+    ])
+      .then(([t, d]) => {
+        if (active) {
+          setTerceros(t.filter((x) => x.estado === 'ACTIVO'))
+          setDtes(d.filter((x) => x.estadoTransmision === 'TRANSMITIDO'))
+        }
+      })
+      .catch(() => {
+        /* silencioso: si falla, el usuario puede seguir con líneas manuales */
+      })
+    return () => {
+      active = false
+    }
+  }, [autoIva, company.id, session])
+
+  const totalDebeCents = lineas.reduce((total, line) => total + (cents(line.debe) ?? 0), 0)
+  const totalHaberCents = lineas.reduce((total, line) => total + (cents(line.haber) ?? 0), 0)
   const difference = totalDebeCents - totalHaberCents
   const isBalanced = totalDebeCents > 0 && difference === 0
   const accountMap = useMemo(
@@ -845,6 +1164,14 @@ function NewEntryForm({
     parsedDate !== null &&
     parsedDate >= isoDate(book.fechaInicio) &&
     parsedDate <= isoDate(book.fechaFin)
+
+  const baseCents = cents(baseGravada)
+  const ivaPreviewCents = baseCents !== null ? Math.round(baseCents * 0.13) : 0
+  const retencionPreviewCents =
+    tipoOperacion === 'VENTA' && company.tipoContribuyente !== 'GRAN_CONTRIBUYENTE'
+      ? Math.round(baseCents !== null ? baseCents * 0.01 : 0)
+      : 0
+
   const linesAreValid =
     lineas.length >= 2 &&
     lineas.every((line) => {
@@ -858,9 +1185,13 @@ function NewEntryForm({
         debitCents !== null &&
         creditCents !== null &&
         (line.parcial === '' || partialCents !== null) &&
-        ((debitCents > 0) !== (creditCents > 0))
+        (debitCents > 0) !== (creditCents > 0)
       )
     })
+
+  const autoIvaValid =
+    !autoIva ||
+    (baseCents !== null && baseCents > 0 && (tipoOperacion === 'VENTA' || idDte !== ''))
 
   function updateLine(key: number, patch: Partial<EntryLineDraft>) {
     setLineas((current) =>
@@ -901,6 +1232,15 @@ function NewEntryForm({
       return
     }
 
+    if (autoIva && !autoIvaValid) {
+      setError(
+        tipoOperacion === 'COMPRA'
+          ? 'Para compras con IVA automático debes indicar la base gravada y seleccionar un DTE.'
+          : 'Para ventas con IVA automático debes indicar la base gravada.',
+      )
+      return
+    }
+
     const normalizedLines = []
     for (const [index, line] of lineas.entries()) {
       const account = accountMap.get(line.cuenta)
@@ -915,14 +1255,13 @@ function NewEntryForm({
         debitCents === null ||
         creditCents === null ||
         (line.parcial !== '' && partialCents === null) ||
-        ((debitCents > 0) === (creditCents > 0))
+        (debitCents > 0) === (creditCents > 0)
       ) {
         setError(
           `El movimiento ${index + 1} debe tener un importe válido en Debe o Haber, pero no en ambos.`,
         )
         return
       }
-
       normalizedLines.push({
         cuentaId: account.id,
         tipoCuenta: account.tipo,
@@ -939,16 +1278,24 @@ function NewEntryForm({
 
     setIsSubmitting(true)
     try {
+      const body: Record<string, unknown> = {
+        fecha: parsedDate,
+        concepto: concepto.trim(),
+        lineas: normalizedLines,
+      }
+      if (autoIva) {
+        body.calcularIvaAutomatico = true
+        body.tipoOperacion = tipoOperacion
+        body.baseGravada = baseGravada
+        if (idTercero) body.idTercero = Number(idTercero)
+        if (idDte) body.idDte = Number(idDte)
+      }
       const result = await apiRequest<SubmissionResult>(
         session,
         `/api/companies/${company.id}/books/${book.id}/entries`,
         {
           method: 'POST',
-          body: JSON.stringify({
-            fecha: parsedDate,
-            concepto: concepto.trim(),
-            lineas: normalizedLines,
-          }),
+          body: JSON.stringify(body),
         },
       )
       onSuccess(result)
@@ -1012,7 +1359,9 @@ function NewEntryForm({
                 Período: {displayShortDate(book.fechaInicio)} – {displayShortDate(book.fechaFin)}
               </small>
               {fecha && parsedDate && !dateInPeriod && (
-                <small className="journal-field-error">Fecha fuera del período seleccionado.</small>
+                <small className="journal-field-error">
+                  Fecha fuera del período seleccionado.
+                </small>
               )}
             </label>
             <div className="journal-number-preview">
@@ -1034,10 +1383,136 @@ function NewEntryForm({
             <small>{concepto.length}/250 caracteres</small>
           </label>
 
+          <div
+            className="journal-form-warning"
+            style={{
+              marginTop: '18px',
+              padding: '12px 14px',
+              background: '#f3f8fc',
+              border: '1px solid #d6e4f0',
+              color: '#3d5a78',
+            }}
+          >
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={autoIva}
+                onChange={(event) => setAutoIva(event.target.checked)}
+                style={{ width: '15px', height: '15px', marginTop: '2px', accentColor: '#385f86' }}
+              />
+              <span>
+                <strong style={{ display: 'block', color: '#294d77', fontSize: '11px' }}>
+                  Cálculo automático de IVA (13%)
+                </strong>
+                <small style={{ color: '#4a6b7f', fontSize: '10px' }}>
+                  Si lo activas, el sistema calcula el IVA sobre la base gravada y agrega
+                  automáticamente la línea de IVA Crédito (compra) o Débito (venta). En compras
+                  exige un DTE registrado.
+                </small>
+              </span>
+            </label>
+          </div>
+
+          {autoIva && (
+            <div className="journal-entry-meta" style={{ marginTop: '14px' }}>
+              <label>
+                <span>Tipo de operación <b>*</b></span>
+                <select
+                  value={tipoOperacion}
+                  onChange={(event) => setTipoOperacion(event.target.value as TipoOperacion)}
+                  style={{
+                    height: '38px',
+                    padding: '0 10px',
+                    border: '1px solid #e0e5eb',
+                    borderRadius: '6px',
+                    outline: 0,
+                    color: '#3e4f63',
+                    background: '#fff',
+                    fontSize: '10px',
+                  }}
+                >
+                  <option value="VENTA">Venta</option>
+                  <option value="COMPRA">Compra</option>
+                </select>
+              </label>
+              <label>
+                <span>Base gravada <b>*</b></span>
+                <input
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={baseGravada}
+                  onChange={(event) => setBaseGravada(event.target.value)}
+                />
+                <small>
+                  IVA calculado: {displayMoney(ivaPreviewCents / 100)}
+                  {retencionPreviewCents > 0 && (
+                    <> · Retención 1%: {displayMoney(retencionPreviewCents / 100)}</>
+                  )}
+                </small>
+              </label>
+              <label>
+                <span>Tercero</span>
+                <select
+                  value={idTercero}
+                  onChange={(event) => setIdTercero(event.target.value)}
+                  style={{
+                    height: '38px',
+                    padding: '0 10px',
+                    border: '1px solid #e0e5eb',
+                    borderRadius: '6px',
+                    outline: 0,
+                    color: '#3e4f63',
+                    background: '#fff',
+                    fontSize: '10px',
+                  }}
+                >
+                  <option value="">— Sin tercero —</option>
+                  {terceros.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.nombre}
+                      {t.nit ? ` · ${t.nit}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {tipoOperacion === 'COMPRA' && (
+                <label>
+                  <span>DTE asociado <b>*</b></span>
+                  <select
+                    value={idDte}
+                    onChange={(event) => setIdDte(event.target.value)}
+                    style={{
+                      height: '38px',
+                      padding: '0 10px',
+                      border: '1px solid #e0e5eb',
+                      borderRadius: '6px',
+                      outline: 0,
+                      color: '#3e4f63',
+                      background: '#fff',
+                      fontSize: '10px',
+                    }}
+                  >
+                    <option value="">— Selecciona un DTE —</option>
+                    {dtes.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.numeroControl} · {formatMoney(d.total)}
+                      </option>
+                    ))}
+                  </select>
+                  <small>El IVA Crédito requiere un DTE transmitido.</small>
+                </label>
+              )}
+            </div>
+          )}
+
           <div className="journal-lines-heading">
             <div>
               <h3>Detalle contable</h3>
-              <p>Selecciona las cuentas del catálogo e ingresa los importes.</p>
+              <p>
+                {autoIva
+                  ? 'Ingresa solo las líneas base. El sistema agregará la línea de IVA.'
+                  : 'Selecciona las cuentas del catálogo e ingresa los importes.'}
+              </p>
             </div>
             <button className="secondary-button" type="button" onClick={addLine}>
               <Icon name="plus" size={16} /> Agregar línea
@@ -1069,12 +1544,9 @@ function NewEntryForm({
                         <option
                           key={account.key}
                           value={account.key}
-                          disabled={
-                            account.estado !== 'ACTIVA' ||
-                            !account.permiteMovimientos
-                          }
+                          disabled={account.estado !== 'ACTIVA' || !account.permiteMovimientos}
                         >
-                          {`${'　'.repeat(Math.min(account.profundidad, 8))}${account.codigo} · ${account.nombre}${account.permiteMovimientos ? '' : ' (agrupadora)'}`}
+                          {`${'　'.repeat(Math.min(account.profundidad ?? 0, 8))}${account.codigo} · ${account.nombre}${account.permiteMovimientos ? '' : ' (agrupadora)'}`}
                         </option>
                       ))}
                     </select>
@@ -1160,17 +1632,34 @@ function NewEntryForm({
               <span>Total Haber</span>
               <strong>{displayMoney(totalHaberCents / 100)}</strong>
             </div>
-            <div className={`journal-balance-indicator${isBalanced ? ' is-balanced' : ' is-unbalanced'}`}>
-              <Icon name={isBalanced ? 'check' : 'warning'} size={17} />
+            {autoIva && (
+              <div>
+                <span>IVA a agregar</span>
+                <strong>{displayMoney(ivaPreviewCents / 100)}</strong>
+              </div>
+            )}
+            <div
+              className={`journal-balance-indicator${isBalanced && autoIvaValid ? ' is-balanced' : ' is-unbalanced'}`}
+            >
+              <Icon
+                name={isBalanced && autoIvaValid ? 'check' : 'warning'}
+                size={17}
+              />
               <span>
-                {isBalanced
+                {isBalanced && autoIvaValid
                   ? 'Partida cuadrada'
-                  : `Diferencia: ${displayMoney(Math.abs(difference) / 100)}`}
+                  : !isBalanced
+                    ? `Diferencia: ${displayMoney(Math.abs(difference) / 100)}`
+                    : 'Completa los datos de IVA'}
               </span>
             </div>
           </div>
 
-          {error && <p className="journal-form-error" role="alert">{error}</p>}
+          {error && (
+            <p className="journal-form-error" role="alert">
+              {error}
+            </p>
+          )}
 
           <footer className="journal-form-actions">
             <button
@@ -1190,7 +1679,8 @@ function NewEntryForm({
                 !isBalanced ||
                 !dateInPeriod ||
                 !concepto.trim() ||
-                accounts.length === 0
+                accounts.length === 0 ||
+                (autoIva && !autoIvaValid)
               }
             >
               {isSubmitting ? 'Contabilizando...' : 'Guardar y contabilizar'}
