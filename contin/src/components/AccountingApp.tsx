@@ -24,6 +24,10 @@ import PeriodsModule from './PeriodsModule'
 import TercerosModule from './TercerosModule'
 import DteModule from './DteModule'
 import LibroIvaModule from './LibroIvaModule'
+import MayorModule from './MayorModule'
+import BalanceModule from './BalanceModule'
+import IvaModule from './IvaModule'
+import CierreModule from './CierreModule'
 import DeclaracionIvaModule from './DeclaracionIvaModule'
 import './AccountingApp.css'
 
@@ -32,7 +36,8 @@ const menuItems: { label: string; slug: string; icon: IconName }[] = [
   { label: 'Libro diario', slug: 'diario', icon: 'journal' },
   { label: 'Libro mayor', slug: 'mayor', icon: 'ledger' },
   { label: 'Balance', slug: 'balance', icon: 'balance' },
-  { label: 'Libro de IVA', slug: 'libro-iva', icon: 'vat' },
+  { label: 'Partidas de cierre', slug: 'cierre', icon: 'closing' },
+  { label: 'Libros de IVA', slug: 'libro-iva', icon: 'vat' },
   { label: 'Declaración IVA', slug: 'declaracion-iva', icon: 'closing' },
   { label: 'Terceros', slug: 'terceros', icon: 'building' },
   { label: 'DTE', slug: 'dte', icon: 'journal' },
@@ -229,10 +234,10 @@ function AccountingApp({
     navigate(`/companies/${currentCompany.id}/diario`)
   }
 
-  const pageTitle = useMemo(
-    () => menuItems.find((item) => item.slug === activeSection)?.label ?? 'Dashboard',
-    [activeSection],
-  )
+  const pageTitle = useMemo(() => {
+    const sectionSlug = activeSection === 'iva' ? 'libro-iva' : activeSection
+    return menuItems.find((item) => item.slug === sectionSlug)?.label ?? 'Dashboard'
+  }, [activeSection])
 
   return (
     <div
@@ -265,9 +270,16 @@ function AccountingApp({
         </div>
         <nav className="sidebar-nav" aria-label="Navegación principal">
           {menuItems.map((item) => {
-            const target = currentCompany
-              ? `/companies/${currentCompany.id}/${item.slug}`
-              : '/companies'
+            const target =
+              item.slug === 'libro-iva'
+                ? '/app/iva'
+                : item.slug === 'mayor' ||
+                    item.slug === 'balance' ||
+                    item.slug === 'cierre'
+                  ? `/app/${item.slug}`
+                  : currentCompany
+                    ? `/companies/${currentCompany.id}/${item.slug}`
+                    : '/companies'
             return (
               <NavLink
                 key={item.slug}
@@ -433,6 +445,54 @@ function AccountingApp({
               }
             />
             <Route
+              path="/app/mayor"
+              element={
+                isLoadingCompanies ? (
+                  <LoadingMessage text="Cargando empresa..." />
+                ) : companies.length === 0 ? (
+                  <Navigate to="/companies/new" replace />
+                ) : (
+                  <MayorModule session={session} company={companies[0]} />
+                )
+              }
+            />
+            <Route
+              path="/app/balance"
+              element={
+                isLoadingCompanies ? (
+                  <LoadingMessage text="Cargando empresa..." />
+                ) : companies.length === 0 ? (
+                  <Navigate to="/companies/new" replace />
+                ) : (
+                  <BalanceModule session={session} company={companies[0]} />
+                )
+              }
+            />
+            <Route
+              path="/app/iva"
+              element={
+                isLoadingCompanies ? (
+                  <LoadingMessage text="Cargando empresa..." />
+                ) : companies.length === 0 ? (
+                  <Navigate to="/companies/new" replace />
+                ) : (
+                  <IvaModule session={session} company={companies[0]} />
+                )
+              }
+            />
+            <Route
+              path="/app/cierre"
+              element={
+                isLoadingCompanies ? (
+                  <LoadingMessage text="Cargando empresa..." />
+                ) : companies.length === 0 ? (
+                  <Navigate to="/companies/new" replace />
+                ) : (
+                  <CierreModule session={session} company={companies[0]} />
+                )
+              }
+            />
+            <Route
               path="/companies/:companyId/:section"
               element={
                 currentCompany ? (
@@ -460,6 +520,30 @@ function AccountingApp({
                     ) : (
                       <SelectPeriod />
                     )
+                  ) : activeSection === 'mayor' ? (
+                    <MayorModule
+                      session={session}
+                      company={currentCompany}
+                      book={currentBook}
+                    />
+                  ) : activeSection === 'balance' ? (
+                    <BalanceModule
+                      session={session}
+                      company={currentCompany}
+                      book={currentBook}
+                    />
+                  ) : activeSection === 'iva' ? (
+                    <IvaModule
+                      session={session}
+                      company={currentCompany}
+                      book={currentBook}
+                    />
+                  ) : activeSection === 'cierre' ? (
+                    <CierreModule
+                      session={session}
+                      company={currentCompany}
+                      book={currentBook}
+                    />
                   ) : activeSection === 'periodos' ? (
                     isCurrentBooksLoading ? (
                       <LoadingMessage text="Cargando períodos contables..." />

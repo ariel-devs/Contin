@@ -515,7 +515,7 @@ GO
 
 INSERT INTO USUARIO (nombre, correo, contrasena_hash)
 VALUES ('Administrador', 'admin@sistemacontable.com',
-        '$2b$10$TIAl26RCm5ZaN1ZIx2WL1.fBgw0.2QvgP20PoRf/pTmHy9utcassq');
+        '$2b$10$WiGKcJ7vkzJkdrHKgEiOOeavd1op78vx.fdnKMBXbS5YXoHT2XraK');
 GO
 
 /* ============================================================
