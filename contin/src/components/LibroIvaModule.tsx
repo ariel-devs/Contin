@@ -30,8 +30,6 @@ function LibroIvaModule({
 
   useEffect(() => {
     let active = true
-    setIsLoading(true)
-    setLoadError('')
     apiRequest<LibroIvaData>(
       session,
       `/api/companies/${company.id}/books/${book.id}/libro-iva`,
@@ -39,7 +37,7 @@ function LibroIvaModule({
       .then((result) => {
         if (active) {
           setData(result)
-          setIsLoading(false)
+          setLoadError('')
         }
       })
       .catch((error: unknown) => {
@@ -49,6 +47,10 @@ function LibroIvaModule({
               ? error.message
               : 'No fue posible consultar el libro de IVA.',
           )
+        }
+      })
+      .finally(() => {
+        if (active) {
           setIsLoading(false)
         }
       })

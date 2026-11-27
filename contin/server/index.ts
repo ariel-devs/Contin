@@ -505,10 +505,16 @@ app.post('/api/auth/login', loginRateLimit, async (request, response) => {
 
 app.get('/api/companies', authenticate, async (request, response) => {
   try {
+    const userId = request.authenticatedUserId
+    if (typeof userId !== 'number') {
+      response.status(401).json({ message: 'La sesión no es válida.' })
+      return
+    }
+
     const connection = await database.connect()
     const result = await connection
       .request()
-      .input('id_usuario', sql.Int, request.authenticatedUserId!)
+      .input('id_usuario', sql.Int, userId)
       .query<{
         id: number
         nombre: string
@@ -524,10 +530,13 @@ app.get('/api/companies', authenticate, async (request, response) => {
          WHERE id_usuario = @id_usuario
          ORDER BY nombre`,
       )
-    response.json(result.recordset)
+    response.json(result.recordset ?? [])
   } catch (error) {
     console.error('Error al consultar empresas:', error)
-    response.status(500).json({ message: 'No fue posible consultar las empresas.' })
+    response.status(500).json({
+      message: 'No fue posible consultar las empresas.',
+      error: error instanceof Error ? error.message : String(error),
+    })
   }
 })
 

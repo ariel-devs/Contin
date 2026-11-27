@@ -559,12 +559,21 @@ function AccountingApp({
                   ) : activeSection === 'cuentas' ? (
                     <AccountCatalogModule session={session} company={currentCompany} />
                   ) : activeSection === 'terceros' ? (
-                    <TercerosModule session={session} company={currentCompany} />
+                    <TercerosModule
+                      key={currentCompany.id}
+                      session={session}
+                      company={currentCompany}
+                    />
                   ) : activeSection === 'dte' ? (
-                    <DteModule session={session} company={currentCompany} />
+                    <DteModule
+                      key={currentCompany.id}
+                      session={session}
+                      company={currentCompany}
+                    />
                   ) : activeSection === 'libro-iva' ? (
                     currentBook ? (
                       <LibroIvaModule
+                        key={`${currentCompany.id}-${currentBook.id}`}
                         session={session}
                         company={currentCompany}
                         book={currentBook}
@@ -575,6 +584,7 @@ function AccountingApp({
                   ) : activeSection === 'declaracion-iva' ? (
                     currentBook ? (
                       <DeclaracionIvaModule
+                        key={`${currentCompany.id}-${currentBook.id}`}
                         session={session}
                         company={currentCompany}
                         book={currentBook}

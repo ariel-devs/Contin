@@ -86,29 +86,37 @@ function DteModule({
   const [isSaving, setIsSaving] = useState(false)
   const [notice, setNotice] = useState('')
   const [actionError, setActionError] = useState('')
-
-  async function loadData() {
-    try {
-      const [dteResult, terceroResult] = await Promise.all([
-        apiRequest<Dte[]>(session, `/api/companies/${company.id}/dte`),
-        apiRequest<Tercero[]>(session, `/api/companies/${company.id}/terceros`),
-      ])
-      setDtes(dteResult)
-      setTerceros(terceroResult.filter((t) => t.estado === 'ACTIVO'))
-      setLoadError('')
-    } catch (error) {
-      setLoadError(
-        error instanceof Error ? error.message : 'No fue posible consultar los DTE.',
-      )
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
-    setIsLoading(true)
-    void loadData()
-  }, [company.id, session])
+    let active = true
+    Promise.all([
+      apiRequest<Dte[]>(session, `/api/companies/${company.id}/dte`),
+      apiRequest<Tercero[]>(session, `/api/companies/${company.id}/terceros`),
+    ])
+      .then(([dteResult, terceroResult]) => {
+        if (active) {
+          setDtes(dteResult)
+          setTerceros(terceroResult.filter((t) => t.estado === 'ACTIVO'))
+          setLoadError('')
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setLoadError(
+            error instanceof Error ? error.message : 'No fue posible consultar los DTE.',
+          )
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false)
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [company.id, session, refreshKey])
 
   const filteredDtes = useMemo(() => {
     const normalized = search.trim().toLocaleLowerCase()
@@ -212,7 +220,8 @@ function DteModule({
       setNotice('El DTE se registró correctamente.')
       setActionError('')
       closeForm()
-      await loadData()
+      setIsLoading(true)
+      setRefreshKey((key) => key + 1)
     } catch (error) {
       setFormError(
         error instanceof Error ? error.message : 'No fue posible registrar el DTE.',
@@ -309,7 +318,13 @@ function DteModule({
             </span>
             <h2>No se pudo cargar la lista</h2>
             <p>{loadError}</p>
-            <button className="secondary-button" onClick={() => void loadData()}>
+            <button
+              className="secondary-button"
+              onClick={() => {
+                setIsLoading(true)
+                setRefreshKey((key) => key + 1)
+              }}
+            >
               Reintentar
             </button>
           </div>

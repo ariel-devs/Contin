@@ -74,28 +74,33 @@ function TercerosModule({
   const [busyId, setBusyId] = useState<number | null>(null)
   const [notice, setNotice] = useState('')
   const [actionError, setActionError] = useState('')
-
-  async function loadTerceros() {
-    try {
-      const result = await apiRequest<Tercero[]>(
-        session,
-        `/api/companies/${company.id}/terceros`,
-      )
-      setTerceros(result)
-      setLoadError('')
-    } catch (error) {
-      setLoadError(
-        error instanceof Error ? error.message : 'No fue posible consultar los terceros.',
-      )
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
-    setIsLoading(true)
-    void loadTerceros()
-  }, [company.id, session])
+    let active = true
+    apiRequest<Tercero[]>(session, `/api/companies/${company.id}/terceros`)
+      .then((result) => {
+        if (active) {
+          setTerceros(result)
+          setLoadError('')
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setLoadError(
+            error instanceof Error ? error.message : 'No fue posible consultar los terceros.',
+          )
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false)
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [company.id, session, refreshKey])
 
   const filteredTerceros = useMemo(() => {
     const normalized = search.trim().toLocaleLowerCase()
@@ -180,7 +185,8 @@ function TercerosModule({
       )
       setActionError('')
       closeForm()
-      await loadTerceros()
+      setIsLoading(true)
+      setRefreshKey((key) => key + 1)
     } catch (error) {
       setFormError(
         error instanceof Error ? error.message : 'No fue posible guardar el tercero.',
@@ -208,7 +214,8 @@ function TercerosModule({
         { method: 'POST' },
       )
       setNotice(`El tercero «${tercero.nombre}» fue desactivado.`)
-      await loadTerceros()
+      setIsLoading(true)
+      setRefreshKey((key) => key + 1)
     } catch (error) {
       setActionError(
         error instanceof Error ? error.message : 'No fue posible desactivar el tercero.',
@@ -293,7 +300,13 @@ function TercerosModule({
             </span>
             <h2>No se pudo cargar la lista</h2>
             <p>{loadError}</p>
-            <button className="secondary-button" onClick={() => void loadTerceros()}>
+            <button
+              className="secondary-button"
+              onClick={() => {
+                setIsLoading(true)
+                setRefreshKey((key) => key + 1)
+              }}
+            >
               Reintentar
             </button>
           </div>

@@ -71,7 +71,7 @@ function App() {
             }
           />
           <Route
-            path="/app/mayor"
+            path="/app/mayor/*"
             element={
               session ? (
                 <AccountingApp session={session} onSignOut={signOut} />
@@ -81,7 +81,7 @@ function App() {
             }
           />
           <Route
-            path="/app/balance"
+            path="/app/balance/*"
             element={
               session ? (
                 <AccountingApp session={session} onSignOut={signOut} />
@@ -91,7 +91,7 @@ function App() {
             }
           />
           <Route
-            path="/app/iva"
+            path="/app/iva/*"
             element={
               session ? (
                 <AccountingApp session={session} onSignOut={signOut} />
@@ -101,7 +101,7 @@ function App() {
             }
           />
           <Route
-            path="/app/cierre"
+            path="/app/cierre/*"
             element={
               session ? (
                 <AccountingApp session={session} onSignOut={signOut} />

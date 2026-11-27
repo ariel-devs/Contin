@@ -34,31 +34,38 @@ function DeclaracionIvaModule({
   const [isSaving, setIsSaving] = useState(false)
   const [notice, setNotice] = useState('')
   const [actionError, setActionError] = useState('')
-
-  async function loadDeclaracion() {
-    try {
-      const result = await apiRequest<DeclaracionResponse>(
-        session,
-        `/api/companies/${company.id}/books/${book.id}/declaracion-iva`,
-      )
-      setDeclaracion(result)
-      setLoadError('')
-    } catch (error) {
-      setLoadError(
-        error instanceof Error
-          ? error.message
-          : 'No fue posible consultar la declaración de IVA.',
-      )
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
-    setIsLoading(true)
-    setDeclaracion(null)
-    void loadDeclaracion()
-  }, [book.id, company.id, session])
+    let active = true
+    apiRequest<DeclaracionResponse>(
+      session,
+      `/api/companies/${company.id}/books/${book.id}/declaracion-iva`,
+    )
+      .then((result) => {
+        if (active) {
+          setDeclaracion(result)
+          setLoadError('')
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setLoadError(
+            error instanceof Error
+              ? error.message
+              : 'No fue posible consultar la declaración de IVA.',
+          )
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false)
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [book.id, company.id, session, refreshKey])
 
   async function generarDeclaracion() {
     setIsSaving(true)
@@ -71,7 +78,8 @@ function DeclaracionIvaModule({
         { method: 'POST' },
       )
       setNotice('La declaración de IVA se generó correctamente.')
-      await loadDeclaracion()
+      setIsLoading(true)
+      setRefreshKey((key) => key + 1)
     } catch (error) {
       setActionError(
         error instanceof Error
@@ -101,7 +109,8 @@ function DeclaracionIvaModule({
         { method: 'POST' },
       )
       setNotice('La declaración fue marcada como presentada.')
-      await loadDeclaracion()
+      setIsLoading(true)
+      setRefreshKey((key) => key + 1)
     } catch (error) {
       setActionError(
         error instanceof Error
@@ -151,7 +160,13 @@ function DeclaracionIvaModule({
           </span>
           <h2>No se pudo cargar la declaración</h2>
           <p>{loadError}</p>
-          <button className="secondary-button" onClick={() => void loadDeclaracion()}>
+          <button
+            className="secondary-button"
+            onClick={() => {
+              setIsLoading(true)
+              setRefreshKey((key) => key + 1)
+            }}
+          >
             Reintentar
           </button>
         </div>
