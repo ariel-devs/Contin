@@ -1152,8 +1152,6 @@ function NewEntryForm({
 
   const totalDebeCents = lineas.reduce((total, line) => total + (cents(line.debe) ?? 0), 0)
   const totalHaberCents = lineas.reduce((total, line) => total + (cents(line.haber) ?? 0), 0)
-  const difference = totalDebeCents - totalHaberCents
-  const isBalanced = totalDebeCents > 0 && difference === 0
   const accountMap = useMemo(
     () => new Map(accounts.map((account) => [account.key, account])),
     [accounts],
@@ -1167,10 +1165,26 @@ function NewEntryForm({
 
   const baseCents = cents(baseGravada)
   const ivaPreviewCents = baseCents !== null ? Math.round(baseCents * 0.13) : 0
-  const retencionPreviewCents =
-    tipoOperacion === 'VENTA' && company.tipoContribuyente !== 'GRAN_CONTRIBUYENTE'
-      ? Math.round(baseCents !== null ? baseCents * 0.01 : 0)
-      : 0
+  const selectedTercero = terceros.find((tercero) => String(tercero.id) === idTercero)
+  const retencionAplica =
+    tipoOperacion === 'VENTA' &&
+    (company.tipoContribuyente === 'PEQUENO' || company.tipoContribuyente === 'MEDIANO') &&
+    selectedTercero?.tipoContribuyente === 'GRAN_CONTRIBUYENTE'
+  const retencionPreviewCents = retencionAplica
+    ? Math.round((baseCents ?? 0) * 0.01)
+    : 0
+  const generatedDebeCents =
+    autoIva && tipoOperacion === 'COMPRA'
+      ? ivaPreviewCents
+      : autoIva
+        ? retencionPreviewCents
+        : 0
+  const generatedHaberCents =
+    autoIva && tipoOperacion === 'VENTA' ? ivaPreviewCents : 0
+  const effectiveDebeCents = totalDebeCents + generatedDebeCents
+  const effectiveHaberCents = totalHaberCents + generatedHaberCents
+  const difference = effectiveDebeCents - effectiveHaberCents
+  const isBalanced = effectiveDebeCents > 0 && difference === 0
 
   const linesAreValid =
     lineas.length >= 2 &&
@@ -1271,7 +1285,7 @@ function NewEntryForm({
       })
     }
 
-    if (totalDebeCents !== totalHaberCents) {
+    if (effectiveDebeCents !== effectiveHaberCents) {
       setError('La partida no está cuadrada. El Debe y el Haber deben ser iguales.')
       return
     }
@@ -1510,7 +1524,7 @@ function NewEntryForm({
               <h3>Detalle contable</h3>
               <p>
                 {autoIva
-                  ? 'Ingresa solo las líneas base. El sistema agregará la línea de IVA.'
+                  ? 'El cobro o pago debe incluir IVA; registra el ingreso o gasto por la base gravada. El sistema agrega las líneas de IVA y retención que correspondan.'
                   : 'Selecciona las cuentas del catálogo e ingresa los importes.'}
               </p>
             </div>
@@ -1626,11 +1640,11 @@ function NewEntryForm({
           <div className="journal-entry-totals">
             <div>
               <span>Total Debe</span>
-              <strong>{displayMoney(totalDebeCents / 100)}</strong>
+              <strong>{displayMoney(effectiveDebeCents / 100)}</strong>
             </div>
             <div>
               <span>Total Haber</span>
-              <strong>{displayMoney(totalHaberCents / 100)}</strong>
+              <strong>{displayMoney(effectiveHaberCents / 100)}</strong>
             </div>
             {autoIva && (
               <div>

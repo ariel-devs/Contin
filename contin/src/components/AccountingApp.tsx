@@ -270,16 +270,9 @@ function AccountingApp({
         </div>
         <nav className="sidebar-nav" aria-label="Navegación principal">
           {menuItems.map((item) => {
-            const target =
-              item.slug === 'libro-iva'
-                ? '/app/iva'
-                : item.slug === 'mayor' ||
-                    item.slug === 'balance' ||
-                    item.slug === 'cierre'
-                  ? `/app/${item.slug}`
-                  : currentCompany
-                    ? `/companies/${currentCompany.id}/${item.slug}`
-                    : '/companies'
+            const target = currentCompany
+              ? `/companies/${currentCompany.id}/${item.slug}`
+              : '/companies'
             return (
               <NavLink
                 key={item.slug}
